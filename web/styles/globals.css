@@ -1,2 +1,49 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@10..48,200..800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-neutral font-satoshi;
+  }
+}
+
+@layer components {
+  .text-code {
+    @apply text-sm font-geist-mono font-normal leading-normal;
+  }
+
+  .text-label {
+    @apply text-sm font-satoshi font-medium leading-normal tracking-wide;
+  }
+
+  .text-caption {
+    @apply text-xs font-satoshi font-normal leading-normal tracking-wide;
+  }
+
+  .floating-nav {
+    @apply backdrop-blur-xl bg-white/80 border border-white/20 shadow-xl;
+  }
+}
+
+@layer utilities {
+  /* Responsive font sizes */
+  @media (max-width: 768px) {
+    .text-display-xl {
+      @apply text-4xl;
+    }
+    
+    .text-display-lg {
+      @apply text-3xl;
+    }
+    
+    .text-display-md {
+      @apply text-2xl;
+    }
+  }
+}
 
