@@ -14,15 +14,3 @@ async def health_check():
         version=settings.app_version,
         timestamp=datetime.now()
     )
-
-
-@router.get("/readiness")
-async def readiness_check():
-    """Readiness check endpoint"""
-    return {"status": "ready", "timestamp": datetime.now()}
-
-
-@router.get("/liveness")
-async def liveness_check():
-    """Liveness check endpoint"""
-    return {"status": "alive", "timestamp": datetime.now()} 

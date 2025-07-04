@@ -1,0 +1,50 @@
+---
+alwaysApply: true
+---
+
+Write modular code. For API, we are using FastAPI. For Web, we are using Next.js.
+
+For web, use the following structure:
+We are using shadcn/ui for the components.
+We are using tailwindcss for the styles.
+We are using typescript for the code.
+We are using icons from lucide-react.
+
+Follow the following structure for the web:
+```
+web/
+├── app/
+├─────── [page1]/ -- page1
+├─────────── components/ -- page1 components
+├─────────── actions/ -- page1 actions
+├─────────── hooks/ -- page1 hooks
+├─────────── types/ -- page1 types
+├─────────── utils/ -- page1 utilities
+├─────── [page2]/ -- page2
+├─────────── components/ -- page2 components
+├─────────── actions/ -- page2 actions
+├─────────── hooks/ -- page2 hooks
+├─────────── types/ -- page2 types
+├─────────── utils/ -- page2 utilities
+├─────── actions/ -- shared global actions
+├─────── hooks/ -- shared global hooks
+├─────── types/ -- shared global types
+├─────── utils/ -- shared global utilities
+├─────── components/ -- shared global components
+├── lib/ -- shared global libraries
+├── public/ -- public assets
+├── styles/ -- styles
+```
+
+For API, we are using FastAPI and it is integrated with our supabase database using Prisma. We are using Prisma models for types.
+
+We are using the following structure for the API:
+```
+api/
+├── app/
+├─────── endpoints/ -- endpoints
+├─────── schemas/ -- schemas
+├─────── tasks/ -- celery tasks
+├─────── settings/ -- settings
+├─────── database.py -- database connection
+```

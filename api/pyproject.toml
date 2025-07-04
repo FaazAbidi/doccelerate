@@ -11,5 +11,7 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "pydantic-core",
+    "prisma>=0.15.0",
+    "celery[redis]",
 ]
 

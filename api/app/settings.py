@@ -18,16 +18,16 @@ class Settings(BaseSettings):
     app_name: str = "Doccelerate API"
     app_version: str = "1.0.0"
     debug: bool = False
-    
-    # Database configuration
-    database_url: str = "sqlite:///./doccelerate.db"
-    
+
     # API configuration
     api_prefix: str = "/api/v1"
     allowed_origins: list[str] = ["*"]
     
-    # Security
-    secret_key: str = "your-secret-key-here-change-in-production"
+
+    REDIS_URL: str
+    
+    DATABASE_URL: str
+    DIRECT_URL: str
 
 
 # Create global settings instance
