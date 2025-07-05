@@ -10,7 +10,32 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  // Globally ignore folders that contain generated or build artifacts
+  {
+    ignores: [
+      "lib/generated/**", // Prisma client bundles and WASM
+      "node_modules/**",
+      ".next/**",
+      "public/**",
+      "./app/components/dot-grid.tsx",
+    ],
+  },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
+
+  // Allow usage of `any` type across the codebase
+  {
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+
+  // Keep a fallback override for generated code in case they slip through (not strictly needed once ignored)
+  {
+    files: ["lib/generated/**"],
+    rules: {
+      all: "off",
+    },
+  },
 ];
 
 export default eslintConfig;

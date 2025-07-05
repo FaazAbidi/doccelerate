@@ -46,6 +46,7 @@ export const authOptions: NextAuthOptions = {
             image: data.user.user_metadata?.avatar_url,
           }
         } catch (error) {
+          console.error(error)
           return null
         }
       }

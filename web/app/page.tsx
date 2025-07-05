@@ -1,6 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, Zap } from "lucide-react"
-import Navbar from "./components/navbar"
+import { ArrowRight } from "lucide-react"
 
 export default function Home() {
   return (

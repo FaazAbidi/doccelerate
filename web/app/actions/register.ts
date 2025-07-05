@@ -56,6 +56,7 @@ export async function registerUser(formData: FormData) {
       requiresConfirmation: data.user && !data.user.email_confirmed_at,
     }
   } catch (error) {
+    console.error(error)
     return {
       error: 'An unexpected error occurred',
     }

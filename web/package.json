@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "dotenv -e ../.env -- next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "generate": "prisma generate"
+    "build": "dotenv -e ../.env -- next build",
+    "start": "dotenv -e ../.env -- next start",
+    "lint": "dotenv -e ../.env -- next lint",
+    "generate": "dotenv -e ../.env -- prisma generate"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",

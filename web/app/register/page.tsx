@@ -3,9 +3,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
-import Link from "next/link"
-import { ArrowRight, Mail, Lock, User, AlertCircle, CheckCircle } from "lucide-react"
+import { ArrowRight, Mail, Lock, User } from "lucide-react"
 import { registerUser } from '../actions/register'
+import { TextInput } from "../components/TextInput"
+import { Alert } from "../components/Alert"
+import { Button } from '../components/Button'
 
 export default function Register() {
   const [error, setError] = useState<string | null>(null)
@@ -40,12 +42,13 @@ export default function Register() {
           })
           
           if (signInResult?.error) {
-            setError('Account created but failed to sign in. Please try signing in manually.')
+            setError('Account created but failed to login. Please try logging in manually.')
           } else {
             router.push('/')
           }
         } catch (error) {
-          setError('Account created but failed to sign in. Please try signing in manually.')
+          console.error(error)
+          setError('Account created but failed to login. Please try logging in manually.')
         }
       }
     }
@@ -69,19 +72,9 @@ export default function Register() {
               </p>
             </div>
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-2">
-                <AlertCircle className="h-5 w-5 text-red-500" />
-                <p className="text-body-sm text-red-700">{error}</p>
-              </div>
-            )}
+            {error && <Alert variant="error">{error}</Alert>}
 
-            {success && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-2">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-                <p className="text-body-sm text-green-700">{success}</p>
-              </div>
-            )}
+            {success && <Alert variant="success">{success}</Alert>}
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
               <div className="space-y-4">
@@ -89,100 +82,88 @@ export default function Register() {
                   <label htmlFor="name" className="sr-only">
                     Full name
                   </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-5 w-5 text-neutral opacity-60" />
-                    </div>
-                    <input
-                      id="name"
-                      name="name"
-                      type="text"
-                      autoComplete="name"
-                      required
-                      className="block w-full pl-10 pr-3 py-3 border border-neutral border-opacity-20 rounded-lg bg-transparent text-neutral placeholder-neutral placeholder-opacity-60 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-body-md"
-                      placeholder="Full name"
-                    />
-                  </div>
+                  <TextInput
+                    id="name"
+                    name="name"
+                    type="text"
+                    autoComplete="name"
+                    required
+                    placeholder="Full name"
+                    leadingIcon={<User className="h-5 w-5 text-neutral opacity-60" />}
+                  />
                 </div>
 
                 <div>
                   <label htmlFor="email" className="sr-only">
                     Email address
                   </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Mail className="h-5 w-5 text-neutral opacity-60" />
-                    </div>
-                    <input
-                      id="email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      required
-                      className="block w-full pl-10 pr-3 py-3 border border-neutral border-opacity-20 rounded-lg bg-transparent text-neutral placeholder-neutral placeholder-opacity-60 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-body-md"
-                      placeholder="Email address"
-                    />
-                  </div>
+                  <TextInput
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    placeholder="Email address"
+                    leadingIcon={<Mail className="h-5 w-5 text-neutral opacity-60" />}
+                  />
                 </div>
 
                 <div>
                   <label htmlFor="password" className="sr-only">
                     Password
                   </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-neutral opacity-60" />
-                    </div>
-                    <input
-                      id="password"
-                      name="password"
-                      type="password"
-                      autoComplete="new-password"
-                      required
-                      className="block w-full pl-10 pr-3 py-3 border border-neutral border-opacity-20 rounded-lg bg-transparent text-neutral placeholder-neutral placeholder-opacity-60 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-body-md"
-                      placeholder="Password"
-                    />
-                  </div>
+                  <TextInput
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    placeholder="Password"
+                    leadingIcon={<Lock className="h-5 w-5 text-neutral opacity-60" />}
+                  />
                 </div>
 
                 <div>
                   <label htmlFor="confirmPassword" className="sr-only">
                     Confirm password
                   </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock className="h-5 w-5 text-neutral opacity-60" />
-                    </div>
-                    <input
-                      id="confirmPassword"
-                      name="confirmPassword"
-                      type="password"
-                      autoComplete="new-password"
-                      required
-                      className="block w-full pl-10 pr-3 py-3 border border-neutral border-opacity-20 rounded-lg bg-transparent text-neutral placeholder-neutral placeholder-opacity-60 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-body-md"
-                      placeholder="Confirm password"
-                    />
-                  </div>
+                  <TextInput
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    placeholder="Confirm password"
+                    leadingIcon={<Lock className="h-5 w-5 text-neutral opacity-60" />}
+                  />
                 </div>
               </div>
 
               <div>
-                <button
+                <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-primary text-white px-8 py-4 rounded-full text-body-lg font-medium hover:bg-opacity-90 transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full"
+                  variant="primary"
+                  size="lg"
+                  trailingIcon={<ArrowRight className="w-5 h-5" />}
                 >
-                  <span>{isLoading ? 'Creating Account...' : 'Create Account'}</span>
-                  {!isLoading && <ArrowRight className="w-5 h-5" />}
-                </button>
+                  {isLoading ? 'Creating Account...' : 'Create Account'}
+                </Button>
               </div>
 
               <div className="text-center">
                 <p className="text-body-md text-neutral">
-                  Already have an account?{" "}
-                  <Link href="/login" className="text-primary hover:text-primary hover:opacity-80 font-medium">
-                    Sign in
-                  </Link>
+                  Already have an account?
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push('/login')}
+                    className='ml-2'
+                    trailingIcon={<ArrowRight className="w-4 h-4" />}
+                  >
+                    Login
+                  </Button>
                 </p>
               </div>
             </form>
