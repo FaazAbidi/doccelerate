@@ -11,6 +11,13 @@ declare module "next-auth" {
       email?: string | null
       image?: string | null
     }
+    githubAccessToken?: string
+  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT {
+    githubAccessToken?: string
   }
 }
 
@@ -50,7 +57,7 @@ export const authOptions: NextAuthOptions = {
           return null
         }
       }
-    })
+    }),
   ],
   pages: {
     signIn: "/login",

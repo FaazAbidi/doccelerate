@@ -1,12 +1,12 @@
 generator client {
   provider        = "prisma-client-py"
   previewFeatures = ["multiSchema"]
+  recursive_type_depth = 5
 }
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  url       = env("DIRECT_URL")
   schemas   = ["auth", "public"]
 }
 
@@ -323,6 +323,7 @@ model users {
   profile                     profile?
   repo                        repo[]
   review_decision             review_decision[]
+  job                         job[]
 
   @@index([instance_id])
   @@index([is_anonymous])
@@ -387,13 +388,26 @@ model merkle_node {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model profile {
-  id         String    @id @db.Uuid
-  full_name  String?
-  username   String?   @unique
-  avatar_url String?
-  created_at DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at DateTime? @default(now()) @db.Timestamptz(6)
-  users      users     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id             String    @id @db.Uuid
+  full_name      String?
+  username       String?   @unique
+  avatar_url     String?
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime? @default(now()) @db.Timestamptz(6)
+  
+  // GitHub connection
+  github_id           String?   @unique // Store GitHub user ID for reference
+  github_username     String?   // GitHub username
+  github_access_token String?   // GitHub access token for API calls
+  github_avatar_url   String?   // GitHub avatar URL
+  
+  // Repository management
+  active_repo_id    String?   @db.Uuid
+  active_branch     String?   // Selected branch for active repository
+  active_directory  String?   // Selected directory for documentation (e.g., 'docs')
+  active_repo       repo?     @relation("ActiveRepo", fields: [active_repo_id], references: [id])
+  
+  users          users     @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@schema("public")
 }
@@ -408,9 +422,20 @@ model repo {
   root_hash        String?
   created_at       DateTime?     @default(now()) @db.Timestamptz(6)
   updated_at       DateTime?     @default(now()) @db.Timestamptz(6)
+  
+  // Enhanced repository metadata
+  name             String?       // Repository name (extracted from github_full_name)
+  description      String?       // Repository description
+  is_public        Boolean       @default(true) // Whether repo is public
+  github_id        Int?          // GitHub repository ID
+  github_url       String?       // GitHub repository URL
+  
   file             file[]
   merkle_node      merkle_node[]
   users            users         @relation(fields: [owner_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  
+  // Active repo relation
+  active_for_profiles profile[] @relation("ActiveRepo")
 
   @@unique([owner_id, github_full_name], map: "repo_owner_unique")
   @@schema("public")
@@ -496,5 +521,42 @@ enum suggestion_status {
   rejected
   applied
 
+  @@schema("public")
+}
+
+enum job_status {
+  pending
+  running
+  completed
+  failed
+
+  @@schema("public")
+}
+
+enum job_type {
+  index
+  query
+
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model job {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  task_id    String     @unique // The async task ID from Celery/background task system
+  user_id    String     @db.Uuid
+  status     job_status @default(pending)
+  type       job_type
+  progress   Float?     @db.Real // Progress percentage (0.0 to 1.0)
+  error_msg  String?    // Error message if failed
+  metadata   Json?      // Additional task-specific metadata
+  created_at DateTime?  @default(now()) @db.Timestamptz(6)
+  updated_at DateTime?  @default(now()) @db.Timestamptz(6)
+  
+  users      users      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id, status])
+  @@index([task_id])
+  @@index([user_id, type, status])
   @@schema("public")
 }

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from multiprocessing import Process
 
 from app.settings import settings
-from app.endpoints import health_router, query_router
+from app.endpoints import health_router, query_router, index_router
 from app.database import connect_db, disconnect_db
 
 # Celery app & helper to run a worker in-process
@@ -70,6 +70,7 @@ app.add_middleware(
 # Include routers with API v1 prefix
 app.include_router(health_router, prefix=settings.api_prefix)
 app.include_router(query_router, prefix=settings.api_prefix)
+app.include_router(index_router, prefix=settings.api_prefix)
 
 # Root endpoint
 @app.get("/")

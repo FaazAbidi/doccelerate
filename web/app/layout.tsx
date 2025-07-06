@@ -3,6 +3,7 @@ import "../styles/globals.css";
 import DotGrid from "./components/dot-grid";
 import Navbar from "./components/navbar";
 import { AuthProvider } from "./components/auth-provider";
+import Providers from "./providers";
 
 export const metadata: Metadata = {
   title: "Doccelerate - Accelerate Your Document Processing",
@@ -64,23 +65,27 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="scroll-smooth">
-      <body className="antialiased bg-background">
-        <AuthProvider>
-          <Navbar />
-          <DotGrid
-            className="fixed top-0 left-0 w-screen h-screen pointer-events-none"
-            dotSize={1}
-            gap={15}
-            baseColor="var(--color-accent)"
-            activeColor="var(--color-primary)"
-            proximity={120}
-            shockRadius={250}
-            shockStrength={5}
-            resistance={750}
-            returnDuration={1.5}
-          />
-          {children}
-        </AuthProvider>
+      <body className="antialiased bg-transparent">
+        <Providers>
+          <AuthProvider>
+            <DotGrid
+              className="fixed inset-0 z-0 pointer-events-none"
+              dotSize={1}
+              gap={15}
+              baseColor="var(--color-accent)"
+              activeColor="var(--color-primary)"
+              proximity={120}
+              shockRadius={250}
+              shockStrength={5}
+              resistance={750}
+              returnDuration={1.5}
+            />
+            <div className="relative z-10 w-full min-h-screen px-4">
+              <Navbar />
+              {children}
+            </div>
+          </AuthProvider>
+        </Providers>
       </body>
     </html>
   );

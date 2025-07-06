@@ -313,10 +313,10 @@ const DotGrid: React.FC<DotGridProps> = ({
   if (!isMounted) {
     return (
       <section
-        className={`p-4 flex items-center justify-center h-full w-full relative ${className}`}
+        className={`h-full w-full relative ${className}`}
         style={style}
       >
-        <div className="w-full h-full relative">
+        <div className="w-screen h-screen relative">
           <canvas className="absolute inset-0 w-full h-full pointer-events-none" />
         </div>
       </section>
@@ -324,17 +324,17 @@ const DotGrid: React.FC<DotGridProps> = ({
   }
 
   return (
-    <section
-      className={`p-4 flex items-center justify-center h-full w-full relative ${className}`}
+    <div
+      className={`absolute inset-0 h-full w-full ${className}`}
       style={style}
     >
       <div ref={wrapperRef} className="w-full h-full relative">
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full pointer-events-none"
+          className="inset-0 w-full h-full pointer-events-none fixed"
         />
       </div>
-    </section>
+    </div>
   );
 };
 

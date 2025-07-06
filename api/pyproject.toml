@@ -13,5 +13,11 @@ dependencies = [
     "pydantic-core",
     "prisma>=0.15.0",
     "celery[redis]",
+    "gitpython",
+    "openai",
+    "supabase",
+    "tiktoken",
+    "numpy",
+    "psycopg2-binary",
 ]
 

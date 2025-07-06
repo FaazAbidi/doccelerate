@@ -27,8 +27,8 @@ export async function middleware(request: NextRequest) {
   }
   
   // Redirect unauthenticated users from protected routes to login
-  if (!token && pathname.startsWith('/docs')) {
-    console.log('Redirecting from docs to login')
+  if (!token && (pathname.startsWith('/docs') || pathname.startsWith('/repos'))) {
+    console.log(`Redirecting from ${pathname} to login`)
     return NextResponse.redirect(new URL('/login', request.url))
   }
   

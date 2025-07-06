@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Zap, ArrowRight, User, LogOut, Home } from 'lucide-react'
+import { Menu, X, Zap, ArrowRight, User, LogOut, Home, Github } from 'lucide-react'
 import { useSession, signOut } from 'next-auth/react'
 import { Button } from './Button'
 import { useRouter, usePathname } from 'next/navigation'
@@ -27,12 +27,14 @@ export default function Navbar() {
   }, [])
 
   const navItems: { href: string; label: string; icon: React.ReactNode }[] = session 
-    ? [{ href: '/docs', label: 'Home', icon: <Home className="w-4 h-4" /> },]
+    ? [{ href: '/docs', label: 'Home', icon: <Home className="w-4 h-4" /> },
+      { href: '/repos', label: 'Repositories', icon: <Github className="w-4 h-4" /> },
+    ]
     : []
 
   const handleSignOut = async () => {
-    await signOut({ callbackUrl: '/' })
-    setIsMobileMenuOpen(false)
+    await signOut({ redirect: false })
+    router.push('/')
   }
 
   return (
@@ -49,7 +51,7 @@ export default function Navbar() {
         </Link>
 
         {/* Desktop Navigation */}
-        <div className="hidden md:flex items-center space-x-8">
+        <div className="hidden md:flex items-center space-x-4">
           {navItems.map((item) => (
             <Button
               key={item.href}

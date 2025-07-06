@@ -45,5 +45,41 @@
       @apply text-2xl;
     }
   }
+
+  /* Custom scrollbar styles for the project */
+  .scrollbar {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.primary") transparent;
+  }
+  .scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+  .scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  .scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-primary rounded-full;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  /* Apply custom scrollbar to CodeMirror scroller */
+  .cm-scroller {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.primary") transparent;
+  }
+  .cm-scroller::-webkit-scrollbar {
+    width: 8px;
+  }
+  .cm-scroller::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  .cm-scroller::-webkit-scrollbar-thumb {
+    @apply bg-primary rounded-full;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
 }
 

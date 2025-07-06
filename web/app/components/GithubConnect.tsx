@@ -1,0 +1,107 @@
+'use client'
+
+import { useState } from 'react'
+import { Github, ExternalLink, Unlink } from 'lucide-react'
+import { Card } from '@/app/components/Card'
+import { Button } from '@/app/components/Button'
+import { disconnectGithubAccount } from '@/app/actions/githubConnect'
+
+interface GithubConnectProps {
+  isConnected: boolean
+  githubUsername?: string | null
+  githubAvatarUrl?: string | null
+}
+
+export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: GithubConnectProps) {
+  const [isDisconnecting, setIsDisconnecting] = useState(false)
+
+  const handleConnect = () => {
+    // Redirect to GitHub OAuth
+    const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
+    const redirectUri = `${window.location.origin}/api/auth/github/callback`
+    const scope = 'repo read:user user:email'
+    
+    const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`
+    window.location.href = githubAuthUrl
+  }
+
+  const handleDisconnect = async () => {
+    setIsDisconnecting(true)
+    try {
+      const result = await disconnectGithubAccount()
+      if (result.success) {
+        window.location.reload()
+      } else {
+        alert(result.error || 'Failed to disconnect GitHub account')
+      }
+    } catch {
+      alert('Failed to disconnect GitHub account')
+    } finally {
+      setIsDisconnecting(false)
+    }
+  }
+
+  return (
+    <Card variant="default" className="p-4 w-full max-w-none text-left">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="flex-shrink-0 mt-1 mr-2 sm:mt-0">
+            <Github className="w-5 h-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1 text-left">
+            <h3 className="text-heading-sm text-neutral font-medium mb-1">
+              GitHub Integration
+            </h3>
+            <p className="text-body-xs text-neutral opacity-60 leading-relaxed">
+              Connect your GitHub account to access your repositories
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex-shrink-0">
+          {isConnected ? (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-3">
+                {githubAvatarUrl && (
+                  <img
+                    src={githubAvatarUrl}
+                    alt={githubUsername || 'GitHub Avatar'}
+                    className="w-8 h-8 rounded-full border border-neutral/20"
+                  />
+                )}
+                <div className="min-w-0">
+                  <div className="text-body-sm text-neutral font-medium truncate">
+                    {githubUsername}
+                  </div>
+                  <div className="text-body-xs text-success font-medium">
+                    Connected
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                leadingIcon={<Unlink className="w-4 h-4" />}
+                onClick={handleDisconnect}
+                disabled={isDisconnecting}
+                className="w-full sm:w-auto"
+              >
+                {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="primary"
+              size="md"
+              leadingIcon={<ExternalLink className="w-4 h-4" />}
+              onClick={handleConnect}
+              className="w-full sm:w-auto"
+            >
+              Connect GitHub
+            </Button>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+} 

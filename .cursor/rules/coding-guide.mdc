@@ -13,7 +13,7 @@ We are using icons from lucide-react.
 Always use the colors from our own theme. Don't write hex codes in anywhere in the code. Use the colors from the theme.
 Same goes for fonts. Don't write font names in the code. Use the fonts from the theme. Also for font sizes, don't write px in the code. Use the font sizes from the theme.
 
-MAKE SURE ALL THE COMPONENTS ARE RESPONSIVE.
+MAKE SURE ALL THE COMPONENTS ARE RESPONSIVE. We DON'T CREATE API ROUTES FOR SERVER SIDE ACTIONS. WE ARE USING SERVER ACTIONS FOR SERVER SIDE ACTIONS.
 
 Follow the following structure for the web:
 ```
@@ -53,3 +53,8 @@ api/
 ├─────── settings/ -- settings
 ├─────── database.py -- database connection
 ```
+
+
+After every database schema change, run the following command, make sure to sync it with the supabase database and also sync it with the prisma schema in the api folder. Or web folder if are making changes from the api folder. MAKE SURE BOTH THE PRISMA SCHEMA AND THE SUPABASE SCHEMA ARE IN SYNC.
+
+CHANGE THE SCHEMA BY CHANGING THE PRISMA SCHEMA ONLY. NO OTHER WAY.
