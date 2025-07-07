@@ -1,0 +1,14 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "uv sync --frozen && uv run prisma generate"
+
+[deploy]
+startCommand = "uv run uvicorn main:app --host 0.0.0.0 --port $PORT"
+restartPolicyType = "ON_FAILURE"
+healthcheckPath = "/api/v1/health/"
+healthcheckTimeout = 300
+
+[variables]
+PORT = "8000"
+PYTHONDONTWRITEBYTECODE = "1"
+PYTHONUNBUFFERED = "1" 

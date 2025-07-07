@@ -42,28 +42,63 @@ These are automatically set by Railway when you add the services:
 
 ## Deployment Steps
 
-### 1. Connect Your Repository
+### 1. Create a New Project
 1. Go to [Railway Dashboard](https://railway.app/dashboard)
 2. Click "New Project"
-3. Select "Deploy from GitHub repo"
-4. Choose your repository
+3. Select "Empty Project"
 
-### 2. Configure Services
-Railway will automatically detect the `railway.toml` configuration and set up three services:
-- **api** - FastAPI backend
-- **web** - Next.js frontend  
-- **celery-worker** - Background task processor
+### 2. Deploy Each Service Separately
 
-### 3. Set Environment Variables
-1. Go to each service in Railway dashboard
-2. Navigate to "Variables" tab
-3. Add the required environment variables listed above
+#### 2.1 Deploy API Service
+1. Click "New" → "GitHub Repo"
+2. Select your repository
+3. Set **Root Directory** to `api`
+4. Railway will detect Python and use the `api/railway.toml` configuration
+5. Name the service "api"
 
-### 4. Add Database and Redis
+#### 2.2 Deploy Web Service
+1. Click "New" → "GitHub Repo" 
+2. Select the same repository
+3. Set **Root Directory** to `web`
+4. Railway will detect Node.js and use the `web/railway.toml` configuration  
+5. Name the service "web"
+
+#### 2.3 Deploy Celery Worker
+1. Click "New" → "GitHub Repo"
+2. Select the same repository  
+3. Set **Root Directory** to `api`
+4. Override the start command to: `uv run celery -A app.tasks.celery_app worker --loglevel=info`
+5. Add environment variable: `C_FORCE_ROOT=1`
+6. Name the service "celery-worker"
+
+### 3. Add Database and Redis
 1. Click "New" in your project
 2. Add PostgreSQL database
 3. Add Redis database
 4. These will automatically populate `DATABASE_URL` and `REDIS_URL`
+
+### 4. Set Environment Variables
+Add these variables to **all services** (api, web, celery-worker):
+
+#### Shared Variables:
+- `DATABASE_URL` - (Auto-set by PostgreSQL service)
+- `REDIS_URL` - (Auto-set by Redis service)
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY` 
+- `SUPABASE_KEY`
+- `OPENAI_API_KEY`
+
+#### Web Service Only:
+- `NEXTAUTH_SECRET`
+- `NEXTAUTH_URL` - Set to your web service domain
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `NEXT_PUBLIC_API_URL` - Set to your api service domain
+- `NEXT_PUBLIC_SUPABASE_URL` - Same as `SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Same as `SUPABASE_ANON_KEY`
+
+#### Celery Worker Only:
+- `C_FORCE_ROOT=1`
 
 ### 5. Configure GitHub OAuth
 1. Go to GitHub Developer Settings
@@ -163,12 +198,11 @@ To use a custom domain:
 
 ## Environment-Specific Configuration
 
-The `railway.toml` includes environment-specific variables. You can override these per environment:
+Each service has its own `railway.toml` file:
+- `api/railway.toml` - FastAPI backend configuration
+- `web/railway.toml` - Next.js frontend configuration
 
-```toml
-[environments.staging.variables]
-NODE_ENV = "staging"
-```
+You can override variables per environment in Railway dashboard under the "Variables" tab.
 
 ## Support
 

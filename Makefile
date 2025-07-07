@@ -59,11 +59,8 @@ db-sync:
 railway-login:
 	railway login
 
-railway-init:
-	railway init
-
-railway-deploy:
-	railway up
+# Note: Railway services must be created manually via dashboard for monorepo
+# Each service points to different root directories (api/, web/, api/ for worker)
 
 railway-logs-api:
 	railway logs --service api
@@ -76,3 +73,12 @@ railway-logs-worker:
 
 railway-status:
 	railway status
+
+railway-deploy-api:
+	cd api && railway up
+
+railway-deploy-web:
+	cd web && railway up
+
+railway-deploy-all:
+	$(MAKE) -j 2 railway-deploy-api railway-deploy-web
