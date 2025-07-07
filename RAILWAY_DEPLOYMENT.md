@@ -49,7 +49,7 @@ These are automatically set by Railway when you add the services:
 4. Choose your repository
 
 ### 2. Configure Services
-Railway will automatically detect the `railway.json` configuration and set up three services:
+Railway will automatically detect the `railway.toml` configuration and set up three services:
 - **api** - FastAPI backend
 - **web** - Next.js frontend  
 - **celery-worker** - Background task processor
@@ -163,18 +163,11 @@ To use a custom domain:
 
 ## Environment-Specific Configuration
 
-The `railway.json` includes environment-specific variables. You can override these per environment:
+The `railway.toml` includes environment-specific variables. You can override these per environment:
 
-```json
-{
-  "environments": {
-    "staging": {
-      "variables": {
-        "NODE_ENV": "staging"
-      }
-    }
-  }
-}
+```toml
+[environments.staging.variables]
+NODE_ENV = "staging"
 ```
 
 ## Support
