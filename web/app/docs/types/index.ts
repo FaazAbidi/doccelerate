@@ -2,6 +2,7 @@ export interface TreeNode {
   path: string
   name: string
   type: 'file' | 'directory'
+  has_uncommitted_changes?: boolean
   children?: TreeNode[]
 }
 
@@ -43,11 +44,20 @@ export interface QueryResponse {
   timestamp: Date
 }
 
+export interface Operation {
+  file: string
+  op: 'insertAfter' | 'insertBefore' | 'replace' | 'deleteBlock'
+  find: string
+  replace?: string
+  insert?: string
+  until?: string
+}
+
 export interface AISuggestion {
   id: string
   fileId: string
   filePath: string
-  patchUnifiedDiff: string
+  operationsJson: Operation[]
   status: 'pending' | 'accepted' | 'rejected' | 'applied'
   confidence?: number
   modelUsed?: string
@@ -71,4 +81,11 @@ export interface ChatMessage {
   queryRequest?: QueryRequest
   queryResponse?: QueryResponse
   suggestions?: AISuggestion[]
+}
+
+// Custom events
+declare global {
+  interface WindowEventMap {
+    'file-updated': CustomEvent<{filePath: string}>;
+  }
 } 

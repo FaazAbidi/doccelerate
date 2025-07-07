@@ -9,6 +9,7 @@ import tiktoken
 import re
 import logging
 
+from app.utils.prompts import SYSTEM_PROMPT, generate_user_prompt
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ class OpenAIService:
         """
         return len(self._encoding.encode(text))
     
-    def split_text_by_tokens(self, text: str, max_tokens: int = 8000, overlap_tokens: int = 200) -> List[str]:
+    def split_text_by_tokens(self, text: str, max_tokens: int = 1000, overlap_tokens: int = 100) -> List[str]:
         """
         Split text into chunks based on token count with overlap
         
@@ -251,7 +252,7 @@ class OpenAIService:
             print(f"OpenAI health check failed: {e}")
             return False
     
-    async def generate_documentation_patches(
+    async def generate_documentation_operations(
         self, 
         user_query: str, 
         relevant_chunks: List[Dict[str, Any]], 
@@ -259,7 +260,7 @@ class OpenAIService:
         model: Optional[str] = None
     ) -> Optional[str]:
         """
-        Generate unified diff patches for documentation changes based on user query and relevant context
+        Generate operations JSON for documentation changes based on user query and relevant context
         
         Args:
             user_query: The user's natural language change request
@@ -268,52 +269,41 @@ class OpenAIService:
             model: OpenAI model to use (defaults to gpt-4)
             
         Returns:
-            Raw LLM response with unified diff patches or None if failed
+            Raw LLM response with operations JSON or None if failed
         """
         try:
-            # Build context from relevant chunks
+            # -----------------------------------------------------------------
+            # Build DOCUMENTATION CONTEXT but respect the model's 8k-token
+            # limit. We leave ~1.5k tokens for the system/user prompts and
+            # the model's reply, so we cap the context at ~6.5k tokens.
+            # -----------------------------------------------------------------
+            token_budget = 50_500
             context_parts = []
+            current_tokens = 0
+
             for chunk in relevant_chunks:
-                context_parts.append(f"File: {chunk.get('file_path', 'unknown')}")
-                context_parts.append(f"Content:\n{chunk.get('content', '')}")
-                context_parts.append("---")
+                # Include line numbers if available
+                chunk_text = (
+                    f"File Path: {chunk.get('file_path', '')}\n" +
+                    f"File Similarity: {chunk.get('similarity', 0.0)}\n" +
+                    f"File Content:\n**START OF FILE**\n{chunk.get('content', '')}\n**END OF FILE**\n"
+                )
+                chunk_tokens = self.count_tokens(chunk_text)
+
+                # Stop once adding the next chunk would overshoot the budget
+                if current_tokens + chunk_tokens > token_budget:
+                    logger.warning(f"Token budget exceeded, truncating context at {current_tokens} tokens")
+                    break
+
+                context_parts.append(chunk_text)
+                current_tokens += chunk_tokens
             
             context = "\n".join(context_parts)
+
+            system_prompt: str = SYSTEM_PROMPT
+            user_prompt: str = generate_user_prompt(user_query, context, file_paths)
             
-            # Create the system prompt
-            system_prompt = """You are an automated documentation editor. Your task is to generate unified diff patches that implement the requested changes to documentation files.
-
-CRITICAL REQUIREMENTS:
-1. Output ONLY unified diff patches in standard Git diff format
-2. NO prose, explanations, or commentary - only diff patches
-3. Each patch must start with a proper file header: --- a/path/to/file.md +++ b/path/to/file.md
-4. Use proper diff format with @@ line numbers @@
-5. Show context lines (unchanged lines around changes)
-6. Use - for removed lines and + for added lines
-7. Make minimal, precise changes that directly address the user's request
-8. If no changes are needed for a file, do not include a patch for it
-
-Format each patch like this:
---- a/docs/example.md
-+++ b/docs/example.md
-@@ -10,7 +10,7 @@
- This is context before the change
--This line will be removed or changed
-+This line is the new/changed content
- This is context after the change"""
-
-            # Create the user prompt
-            user_prompt = f"""Based on the following documentation content, generate unified diff patches to implement this request: "{user_query}"
-
-DOCUMENTATION CONTEXT:
-{context}
-
-FILES TO POTENTIALLY MODIFY:
-{chr(10).join(file_paths)}
-
-Generate unified diff patches that implement the requested changes. Remember: output only diff patches, no other text."""
-
-            # Make the API call
+            # Make the API call (lower max_tokens so the total stays < 8k)
             response = await self._client.chat.completions.create(
                 model=model or self._chat_model,
                 messages=[
@@ -321,7 +311,7 @@ Generate unified diff patches that implement the requested changes. Remember: ou
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.1,  # Low temperature for consistent output
-                max_tokens=4000   # Enough for multiple file patches
+                max_tokens=5000   # Plenty for several patches, keeps us safe
             )
             
             return response.choices[0].message.content
@@ -546,7 +536,6 @@ Generate unified diff patches that implement the requested changes. Remember: ou
         except Exception as e:
             print(f"Fallback full-text search failed: {e}")
             return []
-
 
 # Global instance to be used throughout the application
 openai_service = OpenAIService() 

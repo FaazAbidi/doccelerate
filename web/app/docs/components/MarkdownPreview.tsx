@@ -1,51 +1,138 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeRaw from 'rehype-raw'
+import rehypeSlug from 'rehype-slug'
+import rehypeAutolinkHeadings from 'rehype-autolink-headings'
+import { Copy, Check } from 'lucide-react'
+import { Button } from '@/app/components/Button'
 
 interface MarkdownPreviewProps {
   content: string
   className?: string
-  theme?: 'light' | 'dark'
 }
 
-// Custom code component with basic styling
+// Enhanced code component with syntax highlighting and copy functionality
 function CodeBlock({ 
   children, 
-  className, 
-  theme = 'light' 
+  className
 }: { 
   children: string; 
-  className?: string; 
-  theme?: 'light' | 'dark' 
+  className?: string
 }) {
-  const isDark = theme === 'dark'
+  const [copied, setCopied] = useState(false)
+  
+  // Extract language from className, handling both markdown and highlight.js formats
+  const extractLanguage = (className?: string): string => {
+    if (!className) return 'text'
+    
+    // Handle various className formats:
+    // - "language-python" (from markdown)
+    // - "hljs language-python" (from highlight.js)
+    // - "python hljs" (alternative highlight.js format)
+    // - "hljs python" (another highlight.js format)
+    
+    const classes = className.split(' ')
+    
+    // Look for language-xxx pattern first
+    const languageClass = classes.find(cls => cls.startsWith('language-'))
+    if (languageClass) {
+      return languageClass.replace('language-', '')
+    }
+    
+    // Filter out highlight.js specific classes and get the language
+    const filteredClasses = classes.filter(cls => 
+      cls !== 'hljs' && 
+      cls !== 'language' && 
+      cls.length > 0
+    )
+    
+    return filteredClasses[0] || 'text'
+  }
+  
+  const language = extractLanguage(className)
+  
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(children)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      console.error('Failed to copy code:', error)
+    }
+  }
   
   return (
-    <pre className={`
-      rounded-lg p-4 overflow-x-auto font-mono text-sm
-      ${isDark ? 'bg-neutral-800 text-neutral-100' : 'bg-neutral/5 text-neutral-900'}
-    `}>
-      <code className={className}>{children}</code>
-    </pre>
+    <div className="relative group mb-4 border border-neutral/20 rounded-lg overflow-hidden bg-white/80">
+      {/* Language label and copy button */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-neutral/20 bg-neutral/5">
+        <span className="text-caption font-sm text-neutral uppercase tracking-wide">
+          {language === 'text' ? 'Code' : language}
+        </span>
+        
+        <Button
+          onClick={handleCopy}
+          size="sm"
+          variant="ghost"
+          className="opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          {copied ? (
+            <Check className="w-3 h-3 text-success" />
+          ) : (
+            <Copy className="w-3 h-3" />
+          )}
+        </Button>
+      </div>
+      
+      {/* Code content */}
+      <pre className="p-4 overflow-x-auto bg-transparent">
+        <code 
+          className={`${className} font-mono text-body-xs leading-relaxed text-neutral`}
+          style={{
+            // Override any default highlight.js styles for better integration
+            background: 'transparent',
+            padding: 0,
+            fontSize: '12px',
+            fontFamily: 'monospace'
+          }}
+        >
+          {children}
+        </code>
+      </pre>
+    </div>
   )
 }
 
-export function MarkdownPreview({ content, className = '', theme = 'light' }: MarkdownPreviewProps) {
+// Enhanced inline code component
+function InlineCode({ 
+  children
+}: { 
+  children: string
+}) {
+  return (
+    <code className="bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded text-body-sm font-mono font-medium">
+      {children}
+    </code>
+  )
+}
+
+export function MarkdownPreview({ content, className = '' }: MarkdownPreviewProps) {
   const markdownComponents = useMemo(() => ({
     code: ({ children, className }: { children: string; className?: string }) => {
-      // Inline code
+      // Inline code (no className means it's inline)
       if (!className) {
-        return (
-          <code className="bg-neutral/10 px-1.5 py-0.5 rounded text-sm font-mono">
-            {children}
-          </code>
-        )
+        return <InlineCode>{children}</InlineCode>
       }
       // Code block
-      return <CodeBlock className={className} theme={theme}>{children}</CodeBlock>
+      return <CodeBlock className={className}>{children}</CodeBlock>
+    },
+    pre: ({ children }: { children: React.ReactNode }) => {
+      // Let CodeBlock handle the pre styling
+      return <>{children}</>
     },
     h1: ({ children }: { children: React.ReactNode }) => (
       <h1 className="text-heading-xl font-bold text-neutral mb-6 mt-8 first:mt-0 border-b border-neutral/20 pb-2">
@@ -83,12 +170,12 @@ export function MarkdownPreview({ content, className = '', theme = 'light' }: Ma
       </p>
     ),
     ul: ({ children }: { children: React.ReactNode }) => (
-      <ul className="list-disc list-inside mb-4 space-y-1 text-neutral">
+      <ul className="list-disc ml-6 mb-4 space-y-1 text-neutral">
         {children}
       </ul>
     ),
     ol: ({ children }: { children: React.ReactNode }) => (
-      <ol className="list-decimal list-inside mb-4 space-y-1 text-neutral">
+      <ol className="list-decimal ml-6 mb-4 space-y-1 text-neutral">
         {children}
       </ol>
     ),
@@ -137,13 +224,13 @@ export function MarkdownPreview({ content, className = '', theme = 'light' }: Ma
     hr: () => (
       <hr className="border-neutral/20 my-8" />
     ),
-  }), [theme])
+  }), [])
 
   return (
     <div className={`prose prose-neutral max-w-none p-6 ${className}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        rehypePlugins={[rehypeRaw, rehypeSlug, [rehypeAutolinkHeadings, {behavior: 'wrap'}], rehypeHighlight]}
         components={markdownComponents as any}
       >
         {content}

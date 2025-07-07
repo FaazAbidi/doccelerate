@@ -1,8 +1,7 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, FileText, Sparkles } from 'lucide-react'
+import { FileText, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '../../components/Button'
 import { AISuggestion } from '../types'
 
 interface AINavigationControlsProps {
@@ -25,21 +24,8 @@ export function AINavigationControls({
       .map(s => s.filePath)
   )).sort()
 
+  // Hide component entirely if there are no pending suggestions
   if (filesWithSuggestions.length === 0) return null
-
-  const currentIndex = currentFilePath 
-    ? filesWithSuggestions.indexOf(currentFilePath)
-    : -1
-
-  const goToNext = () => {
-    const nextIndex = currentIndex >= filesWithSuggestions.length - 1 ? 0 : currentIndex + 1
-    onNavigateToFile(filesWithSuggestions[nextIndex])
-  }
-
-  const goToPrevious = () => {
-    const prevIndex = currentIndex <= 0 ? filesWithSuggestions.length - 1 : currentIndex - 1
-    onNavigateToFile(filesWithSuggestions[prevIndex])
-  }
 
   const getFileName = (path: string) => {
     return path.split('/').pop() || path
@@ -69,12 +55,19 @@ export function AINavigationControls({
 
       {/* Current file info */}
       <div className="mb-3">
+        {/*
+          Display behaviour:
+          1. If exactly one file has suggestions and none is open yet, show that
+             file as a clickable row so the user can open it.
+          2. If a file is already open, show its info.
+          3. Otherwise show a prompt to select a file.
+        */}
         {currentFilePath && filesWithSuggestions.includes(currentFilePath) ? (
           <div className="flex items-center space-x-2 text-neutral">
             <FileText className="w-4 h-4" />
             <span className="text-body-sm font-medium">{getFileName(currentFilePath)}</span>
             <span className="text-caption text-neutral/60">
-              ({getSuggestionCount(currentFilePath)} suggestion{getSuggestionCount(currentFilePath) > 1 ? 's' : ''})
+              ({getSuggestionCount(currentFilePath)} suggestion{getSuggestionCount(currentFilePath) > 0 ? 's' : ''})
             </span>
           </div>
         ) : (
@@ -84,41 +77,10 @@ export function AINavigationControls({
         )}
       </div>
 
-      {/* Navigation controls */}
-      <div className="flex items-center space-x-2">
-        <Button
-          onClick={goToPrevious}
-          disabled={filesWithSuggestions.length <= 1}
-          variant="outline"
-          size="sm"
-          leadingIcon={<ChevronLeft className="w-4 h-4" />}
-          className="flex-1"
-        >
-          Previous
-        </Button>
-        
-        <div className="flex-shrink-0 bg-white/50 rounded-[12px] px-3 py-1">
-          <span className="text-caption text-neutral/70">
-            {currentIndex >= 0 ? currentIndex + 1 : 0} of {filesWithSuggestions.length}
-          </span>
-        </div>
-
-        <Button
-          onClick={goToNext}
-          disabled={filesWithSuggestions.length <= 1}
-          variant="outline"
-          size="sm"
-          trailingIcon={<ChevronRight className="w-4 h-4" />}
-          className="flex-1"
-        >
-          Next
-        </Button>
-      </div>
-
       {/* File list (when multiple files) */}
-      {filesWithSuggestions.length > 1 && (
+      {filesWithSuggestions.length > 0 && (
         <div className="mt-3 space-y-1 max-h-32 overflow-y-auto">
-          {filesWithSuggestions.map((filePath, index) => (
+          {filesWithSuggestions.map((filePath) => (
             <button
               key={filePath}
               onClick={() => onNavigateToFile(filePath)}
@@ -139,13 +101,6 @@ export function AINavigationControls({
           ))}
         </div>
       )}
-
-      {/* Keyboard shortcuts hint */}
-      <div className="mt-3 pt-3 border-t border-primary/10">
-        <div className="text-caption text-neutral/50 text-center">
-          Use ← → arrows to navigate • Enter to accept • Esc to reject
-        </div>
-      </div>
     </div>
   )
 } 

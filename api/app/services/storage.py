@@ -12,7 +12,7 @@ class StorageService:
     
     DOCS_BUCKET = "docs"
     
-    def upload_document(self, repo_id: str, file_path: str, content: bytes) -> bool:
+    def upload_document(self, repo_id: str, file_path: str, content: bytes, force_update: bool = True) -> bool:
         """
         Upload a document file to the docs bucket
         
@@ -20,11 +20,21 @@ class StorageService:
             repo_id: Repository ID
             file_path: Relative file path within the repository
             content: File content as bytes
+            force_update: Whether to force update existing files
             
         Returns:
             True if successful, False otherwise
         """
         storage_key = f"{repo_id}/{file_path}"
+        
+        # If force_update is True, try to delete the file first to avoid conflicts
+        if force_update:
+            try:
+                supabase_client.delete_file(bucket=self.DOCS_BUCKET, path=storage_key)
+            except Exception:
+                # Ignore errors if file doesn't exist
+                pass
+        
         return supabase_client.upload_file(
             bucket=self.DOCS_BUCKET,
             path=storage_key,
@@ -109,6 +119,26 @@ class StorageService:
                 bucket=self.DOCS_BUCKET,
                 path=storage_key
             )
+    
+    async def get_file_content(self, bucket: str, path: str) -> Optional[str]:
+        """
+        Get file content as a string from storage
+        
+        Args:
+            bucket: Storage bucket name
+            path: File path in storage
+            
+        Returns:
+            File content as a string or None if failed
+        """
+        content = supabase_client.download_file(bucket=bucket, path=path)
+        if content:
+            try:
+                return content.decode('utf-8')
+            except UnicodeDecodeError:
+                # If it's not valid UTF-8, try with errors="replace"
+                return content.decode('utf-8', errors="replace")
+        return None
     
     def cleanup_repo_documents(self, repo_id: str) -> bool:
         """

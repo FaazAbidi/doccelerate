@@ -17,28 +17,12 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL("https://doccelerate.com"),
   openGraph: {
     title: "Doccelerate - Accelerate Your Document Processing",
     description: "Transform your document workflows with intelligent processing, automated insights, and seamless integration.",
-    url: "https://doccelerate.com",
     siteName: "Doccelerate",
-    images: [
-      {
-        url: "/og-image.jpg",
-        width: 1200,
-        height: 630,
-        alt: "Doccelerate - Document Processing Platform",
-      },
-    ],
     locale: "en_US",
     type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Doccelerate - Accelerate Your Document Processing",
-    description: "Transform your document workflows with intelligent processing, automated insights, and seamless integration.",
-    images: ["/og-image.jpg"],
   },
   robots: {
     index: true,
@@ -51,11 +35,6 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  verification: {
-    google: "your-google-verification-code",
-    yandex: "your-yandex-verification-code",
-    yahoo: "your-yahoo-verification-code",
-  },
 };
 
 export default function RootLayout({
@@ -65,7 +44,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="scroll-smooth">
-      <body className="antialiased bg-transparent">
+      <body className="antialiased bg-transparent" suppressHydrationWarning={true}>
         <Providers>
           <AuthProvider>
             <DotGrid

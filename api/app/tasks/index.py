@@ -1,3 +1,4 @@
+import datetime
 import os
 import tempfile
 import hashlib
@@ -16,7 +17,8 @@ import traceback
 from app.tasks.celery_app import celery_app
 from app.database import prisma
 from app.settings import settings
-from app.services import storage_service, openai_service
+from app.services.openai_client import openai_service
+from app.services.storage import storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,8 @@ def process_indexing(
     github_full_name: str,
     branch: str,
     docs_directory: str,
-    github_access_token: str
+    github_access_token: str,
+    soft_reindex: bool = False
 ):
     """
     Main indexing task that performs:
@@ -54,6 +57,12 @@ def process_indexing(
     5. Generate embeddings for new chunks
     6. Store everything in database
     7. Send notifications
+    
+    When soft_reindex is True:
+    - Skip cloning repository and reading from disk
+    - Use existing files in storage
+    - Regenerate chunks and embeddings
+    - Update database
     """
     
     import asyncio
@@ -61,7 +70,7 @@ def process_indexing(
     # Wrap everything in a try-catch to prevent exceptions from reaching Celery's internal handling
     try:
         _restore_std_streams()
-        result = asyncio.run(_run_indexing_internal(self, repo_id, user_id, github_full_name, branch, docs_directory, github_access_token))
+        result = asyncio.run(_run_indexing_internal(self, repo_id, user_id, github_full_name, branch, docs_directory, github_access_token, soft_reindex))
         return result
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -85,7 +94,8 @@ async def _run_indexing_internal(
     github_full_name: str,
     branch: str,
     docs_directory: str,
-    github_access_token: str
+    github_access_token: str,
+    soft_reindex: bool = False
 ):
     """
     Internal async function that handles the actual indexing work
@@ -103,18 +113,73 @@ async def _run_indexing_internal(
         if not prisma.is_connected():
             await prisma.connect()
         
-        # Create temporary directory for git operations
-        temp_dir = tempfile.mkdtemp(prefix="doccelerate_index_")
+        # Initialize files_data list
+        files_data = []
         
-        # Step 1: Clone repository
-        current_task.update_state(state='PROGRESS', meta={'step': 'cloning', 'progress': 10})
-        await _update_job_progress(current_task.request.id, user_id, 'running', 10, 'cloning')
-        repo_path = await _clone_repository(github_full_name, branch, docs_directory, temp_dir, github_access_token)
-        
-        # Step 2: Process files
-        current_task.update_state(state='PROGRESS', meta={'step': 'processing_files', 'progress': 30})
-        await _update_job_progress(current_task.request.id, user_id, 'running', 30, 'processing_files')
-        files_data = await _process_files(repo_path, docs_directory, repo_id)
+        if not soft_reindex:
+            # Hard re-indexing: Clone repo and process files from disk
+            # Create temporary directory for git operations
+            temp_dir = tempfile.mkdtemp(prefix="doccelerate_index_")
+            
+            # Step 1: Clone repository
+            current_task.update_state(state='PROGRESS', meta={'step': 'cloning', 'progress': 10})
+            await _update_job_progress(current_task.request.id, user_id, 'running', 10, 'cloning')
+            repo_path = await _clone_repository(github_full_name, branch, docs_directory, temp_dir, github_access_token)
+            
+            # Step 2: Process files
+            current_task.update_state(state='PROGRESS', meta={'step': 'processing_files', 'progress': 30})
+            await _update_job_progress(current_task.request.id, user_id, 'running', 30, 'processing_files')
+            files_data = await _process_files(repo_path, docs_directory, repo_id)
+        else:
+            # Soft re-indexing: Use existing files in storage
+            current_task.update_state(state='PROGRESS', meta={'step': 'fetching_existing_files', 'progress': 20})
+            await _update_job_progress(current_task.request.id, user_id, 'running', 20, 'fetching_existing_files')
+            
+            # Get existing files from database
+            files = await prisma.file.find_many(
+                where={
+                    "repo_id": repo_id
+                },
+                include={
+                    "repo": True
+                }
+            )
+            
+            if not files:
+                raise ValueError(f"No files found for repository {repo_id}. Cannot perform soft re-index.")
+            
+            # Process existing files and prepare them for re-chunking
+            for file in files:
+                try:
+                    # Get file content from storage
+                    storage_key = file.storage_key
+                    # The storage_key in database includes 'docs/' prefix, but the bucket is already 'docs',
+                    # so we need to remove the 'docs/' prefix from the storage key
+                    storage_path = storage_key[5:] if storage_key.startswith('docs/') else storage_key
+                    
+                    # Get content from storage
+                    content = await storage_service.get_file_content('docs', storage_path)
+                    if not content:
+                        logger.warning(f"Could not fetch content for file {file.path}. Skipping.")
+                        continue
+                    
+                    # Add to files_data with existing metadata
+                    files_data.append({
+                        'path': file.path,
+                        'content': content,
+                        'content_hash': file.content_hash,
+                        'storage_key': file.storage_key,
+                        'repo_id': repo_id
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing file {file.path}: {e}")
+            
+            current_task.update_state(state='PROGRESS', meta={
+                'step': 'files_processed', 
+                'progress': 40,
+                'files_count': len(files_data)
+            })
+            await _update_job_progress(current_task.request.id, user_id, 'running', 40, 'files_processed')
         
         # Step 3: Generate chunks and embeddings
         current_task.update_state(state='PROGRESS', meta={'step': 'generating_embeddings', 'progress': 60})
@@ -124,7 +189,7 @@ async def _run_indexing_internal(
         # Step 4: Store in database
         current_task.update_state(state='PROGRESS', meta={'step': 'storing_data', 'progress': 80})
         await _update_job_progress(current_task.request.id, user_id, 'running', 80, 'storing_data')
-        await _store_data(repo_id, files_data, chunks_data)
+        await _store_data(repo_id, files_data, chunks_data, soft_reindex)
         
         # Step 5: Calculate and store Merkle tree
         current_task.update_state(state='PROGRESS', meta={'step': 'merkle_tree', 'progress': 90})
@@ -132,7 +197,14 @@ async def _run_indexing_internal(
         root_hash = await _calculate_merkle_tree(repo_id, files_data)
         
         # Step 6: Update repository with sync info
-        commit_sha = _get_commit_sha(repo_path)
+        if not soft_reindex:
+            # For hard re-indexing, update the commit SHA from git
+            commit_sha = _get_commit_sha(repo_path)
+        else:
+            # For soft re-indexing, keep the existing commit SHA
+            repo = await prisma.repo.find_unique(where={"id": repo_id})
+            commit_sha = repo.last_sync_sha if repo else None
+            
         await _update_repo_sync_info(repo_id, commit_sha, root_hash)
         
         # Step 7: Send notification
@@ -148,13 +220,13 @@ async def _run_indexing_internal(
             'status': 'completed',
             'files_processed': len(files_data),
             'chunks_created': len(chunks_data),
-            'repo_id': repo_id
+            'repo_id': repo_id,
+            'soft_reindex': soft_reindex
         }
         
     except Exception as e:
         # Update job with failure status
         await _update_job_progress(current_task.request.id, user_id, 'failed', None, 'failed', str(e))
-        _set_task_failure_state(current_task, e)
 
         # Return the basic failure structure (detailed info is in task meta)
         return {
@@ -234,7 +306,12 @@ async def _process_files(repo_path: str, docs_directory: str, repo_id: str) -> L
                 
                 # Upload to Supabase storage using storage service
                 storage_key = f"docs/{repo_id}/{relative_path}"
-                upload_success = storage_service.upload_document(repo_id, relative_path, content.encode('utf-8'))
+                upload_success = storage_service.upload_document(
+                    repo_id=repo_id, 
+                    file_path=relative_path, 
+                    content=content.encode('utf-8'),
+                    force_update=True  # Force update to handle existing files
+                )
                 
                 if not upload_success:
                     logger.warning(f"Warning: Failed to upload {relative_path} to storage")
@@ -265,7 +342,6 @@ def _is_binary_file(file_path: str) -> bool:
         return True
 
 
-
 async def _process_chunks(files_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Split files into semantic chunks and generate embeddings
@@ -278,9 +354,58 @@ async def _process_chunks(files_data: List[Dict[str, Any]]) -> List[Dict[str, An
         # Split into chunks using OpenAI service
         chunks = openai_service.split_text_by_tokens(content)
         
+        # Calculate line positions for each chunk
+        content_lines = content.split('\n')
+        chunk_line_positions = []
+        
+        for i, chunk_content in enumerate(chunks):
+            # Find where this chunk starts in the original content
+            if i == 0:
+                start_pos = 0
+            else:
+                # Use the previous chunk end to find where this one starts
+                prev_chunk = chunks[i-1]
+                # Find the position after the previous chunk
+                prev_end_pos = content.find(prev_chunk) + len(prev_chunk)
+                # The current chunk starts somewhere after the previous one
+                # Need to find exact position accounting for potential overlaps
+                search_start = max(0, prev_end_pos - 200)  # Look back a bit to handle overlaps
+                remaining_content = content[search_start:]
+                chunk_start_in_remaining = remaining_content.find(chunk_content)
+                if chunk_start_in_remaining == -1:
+                    # Fallback if exact match isn't found (could happen with whitespace differences)
+                    # Use approximate position
+                    start_pos = prev_end_pos
+                else:
+                    start_pos = search_start + chunk_start_in_remaining
+            
+            # Get chunk end position
+            end_pos = start_pos + len(chunk_content)
+            
+            # Calculate line numbers
+            start_line = 1
+            end_line = 1
+            
+            # Count newlines before start position
+            start_text = content[:start_pos]
+            start_line = start_text.count('\n') + 1  # 1-based line numbers
+            
+            # Count newlines before end position
+            end_text = content[:end_pos]
+            end_line = end_text.count('\n') + 1
+            
+            # Ensure end_line is at least start_line
+            end_line = max(start_line, end_line)
+            
+            chunk_line_positions.append((start_line, end_line))
+        
+        # Process chunks with calculated line positions
         for i, chunk_content in enumerate(chunks):
             # Calculate chunk hash
             chunk_hash = hashlib.sha256(chunk_content.encode('utf-8')).hexdigest()
+            
+            # Get line positions
+            start_line, end_line = chunk_line_positions[i]
             
             # Check if chunk already exists using raw SQL
             existing_chunk_result = await prisma.query_raw(
@@ -304,8 +429,8 @@ async def _process_chunks(files_data: List[Dict[str, Any]]) -> List[Dict[str, An
                     'token_count': openai_service.count_tokens(chunk_content),
                     'file_path': file_data['path'],
                     'chunk_order': i,
-                    'start_line': 0,  # TODO: Calculate actual line numbers
-                    'end_line': 0     # TODO: Calculate actual line numbers
+                    'start_line': start_line,
+                    'end_line': end_line
                 })
             else:
                 # Link existing chunk to file
@@ -316,22 +441,35 @@ async def _process_chunks(files_data: List[Dict[str, Any]]) -> List[Dict[str, An
                     'token_count': existing_chunk['token_count'],
                     'file_path': file_data['path'],
                     'chunk_order': i,
-                    'start_line': 0,
-                    'end_line': 0
+                    'start_line': start_line,
+                    'end_line': end_line
                 })
     
     return chunks_data
 
 
-
-
-
-async def _store_data(repo_id: str, files_data: List[Dict[str, Any]], chunks_data: List[Dict[str, Any]]) -> None:
+async def _store_data(repo_id: str, files_data: List[Dict[str, Any]], chunks_data: List[Dict[str, Any]], soft_reindex: bool = False) -> None:
     """
     Store files and chunks in database
+    
+    Args:
+        repo_id: Repository ID
+        files_data: List of file data dictionaries
+        chunks_data: List of chunk data dictionaries
+        soft_reindex: Flag indicating if this is a soft re-indexing operation
     """
     # Upsert files
     for file_data in files_data:
+        update_data = {
+            "content_hash": file_data['content_hash'],
+            "storage_key": file_data['storage_key'],
+            "updated_at": None  # Will use default
+        }
+        
+        # Only reset has_uncommitted_changes flag if not soft re-indexing
+        if not soft_reindex:
+            update_data["has_uncommitted_changes"] = False
+            
         await prisma.file.upsert(
             where={
                 "repo_id_path": {
@@ -344,13 +482,10 @@ async def _store_data(repo_id: str, files_data: List[Dict[str, Any]], chunks_dat
                     "repo_id": repo_id,
                     "path": file_data['path'],
                     "content_hash": file_data['content_hash'],
-                    "storage_key": file_data['storage_key']
-                },
-                "update": {
-                    "content_hash": file_data['content_hash'],
                     "storage_key": file_data['storage_key'],
-                    "updated_at": None  # Will use default
-                }
+                    "has_uncommitted_changes": False  # Always false for newly created files
+                },
+                "update": update_data
             }
         )
     
@@ -572,10 +707,12 @@ async def _update_job_progress(task_id: str, user_id: str, status: str, progress
                 else:
                     # Create metadata if it doesn't exist
                     update_data["metadata"] = json.dumps({"current_step": step})
+                    
+                update_data["updated_at"] = datetime.datetime.now()
             except Exception as e:
                 logger.error(f"Error updating metadata for task {task_id}: {e}")
                 # Continue without metadata update to avoid blocking the job progress
-        
+
         await prisma.job.update(
             where={"task_id": task_id},
             data=update_data

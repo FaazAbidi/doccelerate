@@ -1,37 +1,37 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Save, Edit, FileText } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Save, Edit, FileText, X, Eye, Check, List } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger } from '../../components/Tabs'
 import { MarkdownEditor } from './MarkdownEditor'
 import { MarkdownPreview } from './MarkdownPreview'
+import { UnifiedDiffView } from './UnifiedDiffView'
 import { getFileContent } from '../actions/getFileContent'
 import { updateFileContent } from '../actions/updateFileContent'
 import type { FileContentResponse } from '../actions/getFileContent'
 import { Button } from '../../components/Button'
 import type { AISuggestion } from '../types'
-import { Check, X, Eye, Edit3 } from 'lucide-react'
+import { applyOperations } from '../utils/operationsApplier'
+import { Tooltip } from '@/app/components/Tooltip'
 
 interface FileEditorProps {
   filePath: string | null
   onClose: () => void
   theme?: 'light' | 'dark'
   suggestions?: AISuggestion[]
-  onAcceptSuggestion?: (suggestionId: string) => Promise<void>
-  onRejectSuggestion?: (suggestionId: string) => Promise<void>
   onAcceptAllSuggestions?: (filePath: string) => Promise<void>
   onRejectAllSuggestions?: (filePath: string) => Promise<void>
 }
 
-type TabType = 'editor' | 'preview' | 'suggestions'
+type TabType = 'editor' | 'preview' | 'diff'
+
+
 
 export function FileEditor({ 
   filePath, 
   onClose, 
   theme = 'light',
   suggestions = [],
-  onAcceptSuggestion,
-  onRejectSuggestion,
   onAcceptAllSuggestions,
   onRejectAllSuggestions
 }: FileEditorProps) {
@@ -42,11 +42,14 @@ export function FileEditor({
   const [isSaving, setIsSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isProcessingSuggestions, setIsProcessingSuggestions] = useState(false)
 
   // Get suggestions for current file
-  const fileSuggestions = filePath ? suggestions.filter(
-    s => s.filePath === filePath && s.status === 'pending'
-  ) : []
+  const fileSuggestions = useMemo(() => 
+    filePath ? suggestions.filter(
+      s => s.filePath === filePath && s.status === 'pending'
+    ) : [], [filePath, suggestions]
+  )
 
   const hasSuggestions = fileSuggestions.length > 0
 
@@ -69,10 +72,8 @@ export function FileEditor({
           setFileData(data)
           setContent(data.content)
           setHasUnsavedChanges(false)
-          // Auto-switch to suggestions if there are any, otherwise preview for markdown files
-          if (hasSuggestions) {
-            setActiveTab('suggestions')
-          } else if (data.isMarkdown) {
+          // Auto-switch to preview for markdown files
+          if (data.isMarkdown) {
             setActiveTab('preview')
           } else {
             setActiveTab('editor')
@@ -89,7 +90,7 @@ export function FileEditor({
     }
 
     loadFile()
-  }, [filePath, hasSuggestions])
+  }, [filePath])
 
   // Handle content changes
   const handleContentChange = useCallback((newContent: string) => {
@@ -98,7 +99,7 @@ export function FileEditor({
   }, [fileData?.content])
 
   // Save file
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!filePath || !hasUnsavedChanges) return
 
     setIsSaving(true)
@@ -110,6 +111,12 @@ export function FileEditor({
         if (fileData) {
           setFileData({ ...fileData, content })
         }
+        
+        // Dispatch file-updated event to notify other components (like DirectoryTreeSidebar)
+        window.dispatchEvent(new CustomEvent('file-updated', { 
+          detail: { filePath } 
+        }))
+        console.log('File saved and updated event dispatched:', filePath)
       } else {
         setError('Failed to save file')
       }
@@ -119,7 +126,7 @@ export function FileEditor({
     } finally {
       setIsSaving(false)
     }
-  }
+  }, [filePath, hasUnsavedChanges, content, fileData])
 
   // Handle tab switching
   const handleTabSwitch = (tab: TabType) => {
@@ -138,87 +145,64 @@ export function FileEditor({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleSave])
-
-  // Apply suggestions to content for preview
-  const getContentWithSuggestions = useCallback(() => {
-    if (!hasSuggestions || !content) return content
+  
+  useEffect(() => {
+    if (!fileData || fileSuggestions.length === 0) {
+      return
+    }
     
-    // For now, return original content
-    // TODO: Implement proper diff parsing and application
-    return content
-  }, [content, hasSuggestions])
-
-  // Handle suggestion actions
-  const handleAcceptSuggestion = async (suggestionId: string) => {
-    if (onAcceptSuggestion) {
-      await onAcceptSuggestion(suggestionId)
+    // Apply suggestions only to the original file content, not the current editor content
+    let updated = fileData.content
+    let hasError = false
+    
+    for (const suggestion of fileSuggestions) {
+      try {
+        const patchedContent = applyOperations(updated, suggestion.operationsJson)
+        if (patchedContent !== updated) {
+          updated = patchedContent
+        }
+      } catch (err) {
+        console.warn('Failed to apply suggestion operations', suggestion.id, err)
+        hasError = true
+        break
+      }
     }
-  }
-
-  const handleRejectSuggestion = async (suggestionId: string) => {
-    if (onRejectSuggestion) {
-      await onRejectSuggestion(suggestionId)
+    
+    if (!hasError) {
+      setContent(updated) // Set content to suggested content initially
+      setHasUnsavedChanges(updated !== fileData.content) // Mark as unsaved if suggestions changed content
     }
-  }
+  }, [fileData, fileSuggestions])
+
+  // Note: Content is only reset when suggestions are explicitly rejected via handleRejectAll
+  // When suggestions are accepted, we keep the current content (which has the accepted changes)
 
   const handleAcceptAll = async () => {
-    if (onAcceptAllSuggestions && filePath) {
+    if (!hasSuggestions || !onAcceptAllSuggestions || !filePath) return
+    setIsProcessingSuggestions(true)
+    try {
       await onAcceptAllSuggestions(filePath)
+    } finally {
+      setIsProcessingSuggestions(false)
     }
   }
 
   const handleRejectAll = async () => {
-    if (onRejectAllSuggestions && filePath) {
+    if (!hasSuggestions || !onRejectAllSuggestions || !filePath) return
+    setIsProcessingSuggestions(true)
+    try {
       await onRejectAllSuggestions(filePath)
-    }
-  }
-
-  // Parse unified diff for display
-  const parseDiff = (diff: string) => {
-    const lines = diff.split('\n')
-    const parsedLines: Array<{
-      type: 'header' | 'context' | 'add' | 'remove' | 'hunk'
-      content: string
-      lineNumber?: { old?: number; new?: number }
-    }> = []
-
-    let oldLineNumber = 1
-    let newLineNumber = 1
-
-    for (const line of lines) {
-      if (line.startsWith('+++') || line.startsWith('---')) {
-        continue // Skip file headers
-      } else if (line.startsWith('@@')) {
-        parsedLines.push({ type: 'hunk', content: line })
-        // Parse hunk header to reset line numbers
-        const match = line.match(/@@ -(\d+),?\d* \+(\d+),?\d* @@/)
-        if (match) {
-          oldLineNumber = parseInt(match[1])
-          newLineNumber = parseInt(match[2])
-        }
-      } else if (line.startsWith('+')) {
-        parsedLines.push({
-          type: 'add',
-          content: line.substring(1),
-          lineNumber: { new: newLineNumber++ }
-        })
-      } else if (line.startsWith('-')) {
-        parsedLines.push({
-          type: 'remove',
-          content: line.substring(1),
-          lineNumber: { old: oldLineNumber++ }
-        })
-      } else if (line.startsWith(' ')) {
-        parsedLines.push({
-          type: 'context',
-          content: line.substring(1),
-          lineNumber: { old: oldLineNumber++, new: newLineNumber++ }
-        })
+      // Reset content back to original and clear unsaved changes
+      if (fileData) {
+        setContent(fileData.content)
+        setHasUnsavedChanges(false)
       }
+    } finally {
+      setIsProcessingSuggestions(false)
     }
-
-    return parsedLines
   }
+
+
 
   if (!filePath) {
     return (
@@ -267,12 +251,37 @@ export function FileEditor({
           <FileText className="w-5 h-5 text-neutral/60" />
           <span className="text-body-md font-medium text-neutral">{fileName}</span>
           {hasUnsavedChanges && (
-            <div className="w-2 h-2 bg-orange-500 rounded-full" />
+            <div className="w-2 h-2 bg-secondary rounded-full" />
           )}
         </div>
 
         {/* Action buttons on the far right */}
         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          {hasSuggestions && (
+            <>
+              <Button
+                onClick={handleRejectAll}
+                disabled={isProcessingSuggestions}
+                size="sm"
+                variant="outline"
+              >
+                <Tooltip content="Reject changes">
+                  <X className="w-4 h-4" />
+                </Tooltip>
+              </Button>
+              <Button
+                onClick={handleAcceptAll}
+                disabled={isProcessingSuggestions}
+                size="sm"
+                variant="primary"
+              >
+                <Tooltip content="Accept changes">
+                  <Check className="w-4 h-4" />
+                </Tooltip>
+              </Button>
+            </>
+          )}
+          <Tooltip content="Save changes">
           <Button
             onClick={handleSave}
             disabled={!hasUnsavedChanges || isSaving}
@@ -280,9 +289,11 @@ export function FileEditor({
             variant={hasUnsavedChanges ? 'primary' : 'secondary'}
           >
             <Save className="w-4 h-4" />
-            {isSaving ? 'Saving...' : 'Save'}
-          </Button>
+              {isSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </Tooltip>
           
+          <Tooltip content="Close">
           <Button
             onClick={onClose}
             size="sm"
@@ -290,6 +301,7 @@ export function FileEditor({
           >
             <X className="w-4 h-4 text-white" />
           </Button>
+          </Tooltip>
         </div>
 
         {/* Tabs centered */}
@@ -310,10 +322,10 @@ export function FileEditor({
                   Preview not available
                 </span>
               )}
-              {hasSuggestions && (
-                <TabsTrigger value="suggestions">
-                  <Edit3 className="w-4 h-4" />
-                  Suggestions
+              {hasUnsavedChanges && (
+                <TabsTrigger value="diff">
+                  <List className="w-4 h-4" />
+                  Diff
                 </TabsTrigger>
               )}
             </TabsList>
@@ -331,133 +343,19 @@ export function FileEditor({
             className="h-full"
           />
         ) : activeTab === 'preview' ? (
-          <div className="h-full overflow-y-auto scrollbar">
+          <div className="h-full">
             <MarkdownPreview
-              content={getContentWithSuggestions()}
-              theme={theme}
+              content={content}
               className="h-full"
             />
           </div>
-        ) : activeTab === 'suggestions' ? (
-          <div className="h-full overflow-y-auto scrollbar p-4">
-            {/* Suggestions header */}
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-neutral/10">
-              <div>
-                <h3 className="text-heading-sm font-medium text-neutral">
-                  AI Suggestions ({fileSuggestions.length})
-                </h3>
-                <p className="text-caption text-neutral/60">
-                  Review and apply suggested changes to this file
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={handleRejectAll}
-                  variant="outline"
-                  size="sm"
-                  leadingIcon={<X className="w-4 h-4" />}
-                >
-                  Reject All
-                </Button>
-                <Button
-                  onClick={handleAcceptAll}
-                  variant="primary"
-                  size="sm"
-                  leadingIcon={<Check className="w-4 h-4" />}
-                >
-                  Accept All
-                </Button>
-              </div>
-            </div>
-
-            {/* Individual suggestions */}
-            <div className="space-y-6">
-              {fileSuggestions.map((suggestion, index) => {
-                const diffLines = parseDiff(suggestion.patchUnifiedDiff)
-                
-                return (
-                  <div key={suggestion.id} className="border border-neutral/10 rounded-[12px] overflow-hidden">
-                    {/* Suggestion header */}
-                    <div className="flex items-center justify-between p-4 bg-primary/5 border-b border-neutral/10">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                          <span className="text-white text-caption font-bold">{index + 1}</span>
-                        </div>
-                        <div>
-                          <p className="text-body-sm font-medium text-neutral">
-                            Suggestion {index + 1}
-                          </p>
-                          <p className="text-caption text-neutral/60">
-                            {suggestion.confidence && 
-                              `${Math.round(suggestion.confidence * 100)}% confident`
-                            }
-                            {suggestion.modelUsed && suggestion.confidence && ' • '}
-                            {suggestion.modelUsed && `${suggestion.modelUsed}`}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          onClick={() => handleRejectSuggestion(suggestion.id)}
-                          variant="outline"
-                          size="sm"
-                          leadingIcon={<X className="w-4 h-4" />}
-                        >
-                          Reject
-                        </Button>
-                        <Button
-                          onClick={() => handleAcceptSuggestion(suggestion.id)}
-                          variant="primary"
-                          size="sm"
-                          leadingIcon={<Check className="w-4 h-4" />}
-                        >
-                          Accept
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Diff display */}
-                    <div className="font-geist-mono text-sm">
-                      {diffLines.map((line, lineIndex) => (
-                        <div
-                          key={lineIndex}
-                          className={`
-                            flex items-start px-4 py-1
-                            ${line.type === 'hunk' ? 'bg-primary/10 text-primary font-medium' : ''}
-                            ${line.type === 'add' ? 'bg-success/10 text-neutral' : ''}
-                            ${line.type === 'remove' ? 'bg-accent/10 text-neutral line-through' : ''}
-                            ${line.type === 'context' ? 'bg-transparent text-neutral/80' : ''}
-                          `}
-                        >
-                          {/* Line Numbers */}
-                          <div className="flex items-center space-x-2 mr-4 text-neutral/50 text-xs font-medium min-w-[60px]">
-                            {line.lineNumber && (
-                              <>
-                                <span className="w-6 text-right">
-                                  {line.lineNumber.old || ''}
-                                </span>
-                                <span className="w-6 text-right">
-                                  {line.lineNumber.new || ''}
-                                </span>
-                              </>
-                            )}
-                          </div>
-
-                          {/* Content */}
-                          <div className="flex-1 whitespace-pre-wrap">
-                            {line.type === 'add' && <span className="text-success mr-2 font-bold">+</span>}
-                            {line.type === 'remove' && <span className="text-accent mr-2 font-bold">-</span>}
-                            {line.type === 'context' && line.lineNumber && <span className="text-neutral/30 mr-2"> </span>}
-                            {line.content}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+        ) : activeTab === 'diff' ? (
+          <UnifiedDiffView
+            originalContent={fileData?.content || ''}
+            currentContent={content}
+            filePath={filePath || ''}
+            className="h-full"
+          />
         ) : null}
       </div>
     </div>

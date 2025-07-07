@@ -3,7 +3,7 @@
 import { getUserUuid } from "@/app/actions/getUserUuid"
 import { prisma } from "@/lib/prisma"
 import { config } from "@/lib/config"
-import { AISuggestion, QueryResponse } from '../types'
+import { QueryResponse } from '../types'
 
 /**
  * Gets the active repository ID for the current user

@@ -7,6 +7,7 @@ export interface TreeNode {
   path: string
   name: string
   type: 'file' | 'directory'
+  has_uncommitted_changes?: boolean
   children?: TreeNode[]
 }
 
@@ -43,6 +44,7 @@ export async function getDirectoryTree(): Promise<TreeNode[] | null> {
     select: {
       path: true,
       storage_key: true,
+      has_uncommitted_changes: true,
     },
     orderBy: {
       path: 'asc',
@@ -78,12 +80,14 @@ export async function getDirectoryTree(): Promise<TreeNode[] | null> {
   for (const path of allPaths) {
     const parts = path.split('/')
     const name = parts[parts.length - 1]
-    const isFile = files.some(f => f.path === path)
+    const fileData = files.find(f => f.path === path)
+    const isFile = !!fileData
     
     const treeNode: TreeNode = {
       path,
       name,
       type: isFile ? 'file' : 'directory',
+      has_uncommitted_changes: isFile ? fileData.has_uncommitted_changes : undefined,
       children: isFile ? undefined : [],
     }
     nodeMap.set(path, treeNode)

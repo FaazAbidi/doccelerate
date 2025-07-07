@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { AISuggestion } from '../types'
 import { 
   getSuggestions, 
-  acceptSuggestion, 
+  applyAndAcceptSuggestion,
   rejectSuggestion, 
   applySuggestion,
   addSuggestions,
@@ -36,7 +36,7 @@ export function useAISuggestions() {
 
   const handleAcceptSuggestion = useCallback(async (suggestionId: string) => {
     try {
-      await acceptSuggestion(suggestionId)
+      await applyAndAcceptSuggestion(suggestionId)
       
       // Remove from local state since we only show pending suggestions
       setSuggestions(prev => 

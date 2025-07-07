@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { checkIndexingStatus } from '../actions/checkIndexingStatus'
 import { startIndexing, StartIndexingResponse } from '../actions/startIndexing'
-import { getJobStatus, JobStatus } from '../actions/getJobStatus'
+import { getJobStatus } from '../actions/getJobStatus'
 import { useRealtimeIndexing, IndexingNotification } from './useRealtimeIndexing'
 
 import { IndexingProgress } from '../components/IndexingProgress'
@@ -27,9 +27,9 @@ export function useIndexingStatus() {
     queryKey: ['indexing-status'],
     queryFn: checkIndexingStatus,
     refetchOnWindowFocus: false,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
-    refetchInterval: false, // Disable automatic refetching
+    staleTime: 0,      // always treat data as stale so fresh fetch on mount
+    gcTime: 0,         // garbage collect cache immediately when unused
+    refetchInterval: false,
   })
 
   // Query for job status when we have a task ID
@@ -61,6 +61,9 @@ export function useIndexingStatus() {
           repo: activeJob.metadata?.repo_name,
           branch: activeJob.metadata?.branch,
           directory: activeJob.metadata?.directory,
+          metadata: {
+            soft_reindex: activeJob.metadata?.soft_reindex || false
+          }
         },
         error: activeJob.error_msg,
         response: {
@@ -88,6 +91,9 @@ export function useIndexingStatus() {
         repo: jobStatus.metadata?.repo_name,
         branch: jobStatus.metadata?.branch,
         directory: jobStatus.metadata?.directory,
+        metadata: {
+          soft_reindex: jobStatus.metadata?.soft_reindex || false
+        }
       }
 
       setIndexingState(prev => ({ ...prev, progress: progressData }))

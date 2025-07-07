@@ -35,6 +35,7 @@ export async function updateFileContent(filePath: string, content: string): Prom
       id: true,
       storage_key: true,
       path: true,
+      repo_id: true,
     },
   })
 
@@ -70,6 +71,7 @@ export async function updateFileContent(filePath: string, content: string): Prom
       where: { id: file.id },
       data: {
         content_hash: contentHash,
+        has_uncommitted_changes: true,
         updated_at: new Date(),
       },
     })

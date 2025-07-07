@@ -20,11 +20,12 @@ export function MarkdownEditor({
   onChange, 
   readOnly = false, 
   theme = 'light',
-  className = '' 
+  className = ''
 }: MarkdownEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
+  const initialValueRef = useRef<string>('')
 
   useEffect(() => {
     if (!editorRef.current) return
@@ -80,6 +81,7 @@ export function MarkdownEditor({
     })
 
     viewRef.current = view
+    initialValueRef.current = value
     setIsInitialized(true)
 
     return () => {
@@ -89,12 +91,16 @@ export function MarkdownEditor({
     }
   }, [theme, readOnly])
 
-  // Update content when value prop changes (but not on user input)
+  // Only update the editor content if the value prop changes from outside
+  // and it's different from what was initially set
   useEffect(() => {
     if (!viewRef.current || !isInitialized) return
     
     const currentValue = viewRef.current.state.doc.toString()
-    if (currentValue !== value) {
+    
+    // Only update if the incoming value is different from current content
+    // and this is not just an echo of what the user typed
+    if (value !== currentValue && value !== initialValueRef.current) {
       viewRef.current.dispatch({
         changes: {
           from: 0,
@@ -102,6 +108,7 @@ export function MarkdownEditor({
           insert: value,
         },
       })
+      initialValueRef.current = value
     }
   }, [value, isInitialized])
 

@@ -211,7 +211,8 @@ export default function ReposPage() {
         {/* Repository Settings */}
         {activeRepoId && (
           <div className="mb-6">
-            <RepoSettingsCard onSettingsUpdate={fetchRepos} />
+            {/* key forces remount when repo changes */}
+            <RepoSettingsCard key={activeRepoId} onSettingsUpdate={fetchRepos} />
           </div>
         )}
 

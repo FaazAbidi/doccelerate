@@ -27,7 +27,7 @@ async def run_query(request: QueryRequest):
     Returns 202 Accepted immediately and queues a Celery job to:
     1. Embed the query text
     2. Search for relevant chunks using pgvector
-    3. Generate unified diff patches using LLM
+    3. Generate operations JSON using LLM
     4. Create suggestions in the database
     5. Send real-time notifications
     """

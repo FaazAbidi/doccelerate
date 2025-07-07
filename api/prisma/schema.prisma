@@ -344,15 +344,16 @@ model chunk {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model file {
-  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  repo_id      String       @db.Uuid
-  path         String
-  content_hash String
-  storage_key  String
-  updated_at   DateTime?    @default(now()) @db.Timestamptz(6)
-  repo         repo         @relation(fields: [repo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  file_chunk   file_chunk[]
-  suggestion   suggestion[]
+  id                      String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  repo_id                 String       @db.Uuid
+  path                    String
+  content_hash            String
+  storage_key             String
+  has_uncommitted_changes Boolean      @default(false)
+  updated_at              DateTime?    @default(now()) @db.Timestamptz(6)
+  repo                    repo         @relation(fields: [repo_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  file_chunk              file_chunk[]
+  suggestion              suggestion[]
 
   @@unique([repo_id, path], map: "file_repo_path_unique")
   @@schema("public")
@@ -461,7 +462,7 @@ model review_decision {
 model suggestion {
   id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   file_id            String            @db.Uuid
-  patch_unified_diff String
+  operations_json    Json
   status             suggestion_status @default(pending)
   confidence         Float?            @db.Real
   model_used         String?

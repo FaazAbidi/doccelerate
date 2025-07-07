@@ -9,6 +9,7 @@ router = APIRouter()
 
 class IndexRequest(BaseModel):
     user_id: str
+    soft_reindex: bool = False
 
 @router.post("/index")
 async def run_index(request: IndexRequest):
@@ -20,6 +21,12 @@ async def run_index(request: IndexRequest):
     2. Creates a job record to track the indexing task
     3. Starts a Celery task for heavy indexing work
     4. Returns task ID for tracking
+    
+    Parameters:
+        - user_id: The user's UUID
+        - soft_reindex: When true, performs a "soft" re-index that preserves existing files in storage
+          and only regenerates chunks and embeddings. When false (default), performs a full re-index
+          including downloading files from GitHub.
     """
     if not request.user_id:
         raise HTTPException(status_code=400, detail="User ID cannot be empty")
@@ -71,7 +78,8 @@ async def run_index(request: IndexRequest):
         github_full_name=profile.active_repo.github_full_name,
         branch=profile.active_branch,
         docs_directory=profile.active_directory,
-        github_access_token=profile.github_access_token
+        github_access_token=profile.github_access_token,
+        soft_reindex=request.soft_reindex
     )
     
     # Create job record in database
@@ -80,7 +88,8 @@ async def run_index(request: IndexRequest):
             "repo_id": profile.active_repo.id,
             "repo_name": profile.active_repo.github_full_name,
             "branch": profile.active_branch,
-            "directory": profile.active_directory
+            "directory": profile.active_directory,
+            "soft_reindex": request.soft_reindex
         }
         
         await db.job.create(

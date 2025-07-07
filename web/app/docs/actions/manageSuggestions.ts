@@ -2,7 +2,10 @@
 
 import { getUserUuid } from "@/app/actions/getUserUuid"
 import { prisma } from "@/lib/prisma"
-import { AISuggestion } from '../types'
+import { updateFileContent } from "./updateFileContent"
+import { getFileContent } from "./getFileContent"
+import { applyOperations } from "../utils/operationsApplier"
+import { AISuggestion, Operation } from '../types'
 
 /**
  * Gets the active repository ID for the current user
@@ -31,7 +34,7 @@ function mapSuggestionToType(dbSuggestion: any, filePath: string): AISuggestion 
     id: dbSuggestion.id,
     fileId: dbSuggestion.file_id,
     filePath: filePath,
-    patchUnifiedDiff: dbSuggestion.patch_unified_diff,
+    operationsJson: dbSuggestion.operations_json,
     status: status,
     confidence: dbSuggestion.confidence,
     modelUsed: dbSuggestion.model_used,
@@ -184,6 +187,102 @@ export async function acceptSuggestion(suggestionId: string): Promise<void> {
   } catch (error) {
     console.error('Failed to accept suggestion:', error)
     throw new Error('Failed to accept suggestion')
+  }
+}
+
+/**
+ * Applies a suggestion by patching the file content and saving it, then marks as applied
+ */
+export async function applyAndAcceptSuggestion(suggestionId: string): Promise<void> {
+  const userId = await getUserUuid()
+  if (!userId) {
+    throw new Error("Not authenticated")
+  }
+
+  try {
+    // Verify the suggestion belongs to a file in the user's active repo
+    const suggestion = await prisma.suggestion.findFirst({
+      where: {
+        id: suggestionId,
+        file: {
+          repo: {
+            owner_id: userId
+          }
+        }
+      },
+      include: {
+        file: {
+          select: {
+            path: true
+          }
+        }
+      }
+    })
+
+    if (!suggestion) {
+      throw new Error("Suggestion not found or not accessible")
+    }
+
+    // Get the current file content
+    const fileContentResponse = await getFileContent(suggestion.file.path)
+    if (!fileContentResponse) {
+      throw new Error("Could not retrieve file content")
+    }
+
+    // Apply the operations to get the new content
+    const operations = suggestion.operations_json as unknown as Operation[]
+    const newContent = applyOperations(fileContentResponse.content, operations)
+
+    // Save the new content to the file
+    const saveSuccess = await updateFileContent(suggestion.file.path, newContent)
+    if (!saveSuccess) {
+      throw new Error("Failed to save the updated file content")
+    }
+
+    // Use a transaction to update both tables atomically
+    await prisma.$transaction([
+      // Update the review_decision record
+      prisma.review_decision.upsert({
+        where: {
+          suggestion_id_reviewer_id: {
+            suggestion_id: suggestionId,
+            reviewer_id: userId
+          }
+        },
+        update: {
+          decision: 'applied',
+          decided_at: new Date()
+        },
+        create: {
+          suggestion_id: suggestionId,
+          reviewer_id: userId,
+          decision: 'applied',
+          decided_at: new Date()
+        }
+      }),
+      // Update the suggestion status to maintain consistency
+      prisma.suggestion.update({
+        where: {
+          id: suggestionId
+        },
+        data: {
+          status: 'applied',
+          updated_at: new Date()
+        }
+      })
+    ])
+
+    console.log(`Successfully applied and accepted suggestion ${suggestionId} to ${suggestion.file.path}`)
+    
+    // Dispatch a custom event that components can listen for
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('file-updated', { 
+        detail: { filePath: suggestion.file.path }
+      }));
+    }
+  } catch (error) {
+    console.error('Failed to apply and accept suggestion:', error)
+    throw new Error(`Failed to apply and accept suggestion: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 

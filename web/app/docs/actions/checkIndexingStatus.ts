@@ -2,7 +2,6 @@
 
 import { getUserUuid } from "@/app/actions/getUserUuid"
 import { prisma } from "@/lib/prisma"
-import { config } from "@/lib/config"
 
 export interface IndexingStatus {
   isConfigured: boolean

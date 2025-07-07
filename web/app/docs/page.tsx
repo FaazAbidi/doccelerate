@@ -12,6 +12,8 @@ import { FileEditor } from './components/FileEditor'
 import { AIChatbox } from './components/AIChatbox'
 import { AINavigationControls } from './components/AINavigationControls'
 import { sendAIQuery } from './actions/sendAIQuery'
+import { useQueryClient } from '@tanstack/react-query'
+import { applyAndAcceptSuggestion } from './actions/manageSuggestions'
 
 export default function DocsPage() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -36,19 +38,17 @@ export default function DocsPage() {
     indexingProgress,
     startIndexing,
     retryIndexing,
-    cancelIndexing
+    cancelIndexing,
+    refetch
   } = useIndexingStatus()
 
   const {
     suggestions,
-    isLoading: isSuggestionsLoading,
-    error: suggestionsError,
     fetchSuggestions,
-    acceptSuggestion,
-    rejectSuggestion,
-    addSuggestions,
-    clearError
+    rejectSuggestion
   } = useAISuggestions()
+
+  const queryClient = useQueryClient()
 
   // Handle file updates from realtime
   const handleFileUpdated = useCallback((filePath: string) => {
@@ -66,7 +66,7 @@ export default function DocsPage() {
   }, [selectedFile])
 
   // Handle new suggestions from realtime
-  const handleNewSuggestions = useCallback(async (repoId: string, suggestionCount: number) => {
+  const handleNewSuggestions = useCallback(async () => {
     console.log('New suggestions received, refreshing...')
     // Refresh the suggestions list when new ones are created
     await fetchSuggestions()
@@ -111,7 +111,7 @@ export default function DocsPage() {
   }, [isProcessingQuery])
 
   // Setup realtime updates for the docs page
-  const { hasActiveQueryJobs, activeQueryJobs } = useRealtimeUpdates({
+  const { hasActiveQueryJobs, activeQueryJobs, currentJob } = useRealtimeUpdates({
     callbacks: {
       onFileUpdated: handleFileUpdated,
       onFileDeleted: handleFileDeleted,
@@ -200,30 +200,17 @@ export default function DocsPage() {
     setFileEditorKey(prev => prev + 1) // Force re-render
   }, [])
 
-  // Check if current file has pending suggestions
-  const currentFileHasSuggestions = selectedFile && suggestions.some(
-    s => s.filePath === selectedFile && s.status === 'pending'
-  )
-
-  // Handle suggestion acceptance/rejection (now handled by FileEditor)
-  const handleAcceptSuggestion = useCallback(async (suggestionId: string) => {
-    await acceptSuggestion(suggestionId)
-  }, [acceptSuggestion])
-
-  const handleRejectSuggestion = useCallback(async (suggestionId: string) => {
-    await rejectSuggestion(suggestionId)
-  }, [rejectSuggestion])
-
   // Handle accepting all suggestions for a file
   const handleAcceptAllSuggestions = useCallback(async (filePath: string) => {
     const fileSuggestions = suggestions.filter(
       s => s.filePath === filePath && s.status === 'pending'
     )
-    
     for (const suggestion of fileSuggestions) {
-      await acceptSuggestion(suggestion.id)
+      await applyAndAcceptSuggestion(suggestion.id)
     }
-  }, [suggestions, acceptSuggestion])
+    window.dispatchEvent(new CustomEvent('file-updated', { detail: { filePath } }))
+    await fetchSuggestions()
+  }, [suggestions, fetchSuggestions])
 
   // Handle rejecting all suggestions for a file
   const handleRejectAllSuggestions = useCallback(async (filePath: string) => {
@@ -242,6 +229,9 @@ export default function DocsPage() {
   // Show navigation only when there are pending suggestions
   const showAINavigation = hasPendingSuggestions
 
+  // New: consider sidebar OR AI navigation visibility when calculating editor width
+  const leftPanelVisible = isSidebarOpen || showAINavigation
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -257,19 +247,40 @@ export default function DocsPage() {
 
   // Show indexing progress if actively indexing
   if (isIndexing && indexingProgress) {
+    // Check if this is a soft re-indexing job
+    const isSoftReindexing = indexingProgress.metadata?.soft_reindex === true;
+    
+    // For soft re-indexing, allow the normal UI to be shown with ReindexNotification
+    if (isSoftReindexing && status?.isIndexed) {
+      // Fall through to the normal UI render path below
+    } else {
+      // For hard indexing, show the full screen progress
+      return (
+        <div className="h-screen bg-transparent flex items-center justify-center px-4 sm:px-6 lg:px-8">
+          <IndexingProgress
+            progress={indexingProgress}
+            onCancel={cancelIndexing}
+            onRetry={retryIndexing}
+          />
+        </div>
+      )
+    }
+  }
+
+  // Show completion progress (but not for soft re-indexing)
+  if (indexingState.phase === 'completed' && indexingProgress && !indexingProgress.metadata?.soft_reindex) {
     return (
       <div className="h-screen bg-transparent flex items-center justify-center px-4 sm:px-6 lg:px-8">
         <IndexingProgress
           progress={indexingProgress}
-          onCancel={cancelIndexing}
           onRetry={retryIndexing}
         />
       </div>
     )
   }
 
-  // Show completion progress
-  if (indexingState.phase === 'completed' && indexingProgress) {
+  // Show failure progress (but not for soft re-indexing)
+  if (indexingState.phase === 'failed' && indexingProgress && !indexingProgress.metadata?.soft_reindex) {
     return (
       <div className="h-screen bg-transparent flex items-center justify-center px-4 sm:px-6 lg:px-8">
         <IndexingProgress
@@ -280,20 +291,10 @@ export default function DocsPage() {
     )
   }
 
-  // Show failure progress
-  if (indexingState.phase === 'failed' && indexingProgress) {
-    return (
-      <div className="h-screen bg-transparent flex items-center justify-center px-4 sm:px-6 lg:px-8">
-        <IndexingProgress
-          progress={indexingProgress}
-          onRetry={retryIndexing}
-        />
-      </div>
-    )
-  }
+  // Determine if this is any soft reindexing job
+  const isSoftReindexJob = indexingProgress?.metadata?.soft_reindex === true;
 
-  // Show documentation editor when repository is indexed
-  if (status?.isIndexed && indexingState.phase === 'idle') {
+  if (status?.isIndexed && (indexingState.phase === 'idle' || isSoftReindexJob)) {
     return (
       <div className="h-screen bg-transparent overflow-hidden">
         {/* Sidebar & AI navigation stacked */}
@@ -305,8 +306,36 @@ export default function DocsPage() {
             hasSuggestions={showAINavigation}
             floating={false}
             onStartReIndexing={async () => {
-              await startIndexing()
+              console.log('🔄 Hard re-indexing called from DirectoryTreeSidebar refresh button')
+              try {
+                // Call startIndexing() directly to initiate hard re-indexing
+                const result = await startIndexing();
+                console.log('🔄 startIndexing result:', result);
+                
+                if (result && result.success) {
+                  // Only invalidate query cache after successful API call
+                  await queryClient.invalidateQueries({ queryKey: ['indexing-status'] });
+                  await refetch();
+                } else {
+                  console.error('🔄 Failed to start indexing:', result?.message || 'Unknown error');
+                }
+              } catch (error) {
+                console.error('🔄 Error in onStartReIndexing:', error)
+              }
             }}
+            onSoftReIndexStarted={async () => {
+              console.log('🔄 Soft re-indexing started, triggering recovery mechanism')
+              try {
+                // For soft re-indexing, just refetch the status to trigger recovery mechanism
+                // The recovery mechanism in useIndexingStatus will pick up the active job
+                await queryClient.invalidateQueries({ queryKey: ['indexing-status'] });
+                await refetch();
+                console.log('🔄 Refetched indexing status for soft reindex recovery');
+              } catch (error) {
+                console.error('🔄 Error in onSoftReIndexStarted:', error)
+              }
+            }}
+            indexingProgress={indexingState.phase !== 'idle' ? indexingProgress : undefined}
           />
 
           {showAINavigation && (
@@ -323,7 +352,7 @@ export default function DocsPage() {
         <div className="fixed right-10 top-24 h-full w-full">
           <div
             className="h-[calc(100vh-250px)] ml-auto transition-all duration-300 ease-in-out relative"
-            style={{ width: isSidebarOpen ? 'calc(100vw - 400px)' : 'calc(100vw - 120px)' }}
+            style={{ width: leftPanelVisible ? 'calc(100vw - 400px)' : 'calc(100vw - 120px)' }}
           >
             <FileEditor
               key={fileEditorKey}
@@ -331,8 +360,6 @@ export default function DocsPage() {
               onClose={() => setSelectedFile(null)}
               theme="light"
               suggestions={suggestions}
-              onAcceptSuggestion={handleAcceptSuggestion}
-              onRejectSuggestion={handleRejectSuggestion}
               onAcceptAllSuggestions={handleAcceptAllSuggestions}
               onRejectAllSuggestions={handleRejectAllSuggestions}
             />
@@ -343,6 +370,8 @@ export default function DocsPage() {
         <AIChatbox
           onSendQuery={handleSendQuery}
           status={queryStatus}
+          disabled={isIndexing || isStartingIndexing}
+          currentJob={currentJob}
         />
       </div>
     )

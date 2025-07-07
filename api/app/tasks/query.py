@@ -2,12 +2,12 @@ import asyncio
 import traceback
 import logging
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 from .celery_app import celery_app
-from app.database import get_db, prisma
+from app.database import prisma
 from app.services.openai_client import openai_service
-from app.services.diff_parser import parse_llm_response_to_suggestions, DiffParseError
+from app.services.operations_parser import parse_llm_response_to_suggestions, OperationParseError, parse_operations_json
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -58,19 +58,6 @@ async def _update_job_progress(task_id: str, user_id: str, status: str, progress
         # Don't fail the main task if job update fails
 
 
-def _set_task_failure_state(current_task, error: Exception):
-    """Set task failure state with error details"""
-    current_task.update_state(
-        state='FAILURE',
-        meta={
-            'step': 'failed',
-            'progress': 0,
-            'error': str(error),
-            'traceback': traceback.format_exc()
-        }
-    )
-
-
 @celery_app.task(bind=True, name="app.tasks.process_query")
 def process_query(self, query: str, user_id: str, repo_id: str) -> Dict[str, Any]:
     """
@@ -80,8 +67,9 @@ def process_query(self, query: str, user_id: str, repo_id: str) -> Dict[str, Any
     1. Embeds the query text
     2. Searches for relevant chunks using pgvector
     3. Checks if repo needs re-indexing based on Merkle tree
-    4. Prompts LLM with context to generate unified diff patches
-    5. Parses diffs and creates suggestion records
+
+    4. Prompts LLM with context to generate operations JSON
+    5. Parses operations and creates suggestion records
     6. Sends real-time notifications
     
     Args:
@@ -98,7 +86,6 @@ def process_query(self, query: str, user_id: str, repo_id: str) -> Dict[str, Any
     except Exception as e:
         logger.error(f"Query processing error: {e}")
         logger.error(traceback.format_exc())
-        _set_task_failure_state(self, e)
         
         return {
             "status": "failed",
@@ -106,7 +93,6 @@ def process_query(self, query: str, user_id: str, repo_id: str) -> Dict[str, Any
             "query": query[:100] + "..." if len(query) > 100 else query,
             "repo_id": repo_id
         }
-
 
 async def _run_query_internal(
     current_task,
@@ -138,8 +124,8 @@ async def _run_query_internal(
         relevant_chunks = await openai_service.search_similar_chunks(
             query_embedding=query_embedding,
             repo_id=repo_id,
-            limit=15,  # Get more chunks for better context
-            similarity_threshold=0.3  # Lower threshold for broader search
+            limit=30,  # Get more chunks for better context
+            similarity_threshold=0.5  # Lower threshold for broader search
         )
         
         # Fallback: try lexical full-text search if vector search returned nothing
@@ -152,8 +138,6 @@ async def _run_query_internal(
                 repo_id=repo_id,
                 limit=15
             )
-            
-        logger.info(f"Relevant chunks: {relevant_chunks}")
         
         if not relevant_chunks:
             # Complete the job and update metadata
@@ -185,60 +169,48 @@ async def _run_query_internal(
         current_task.update_state(state='PROGRESS', meta={'step': 'preparing_context', 'progress': 45})
         await _update_job_progress(current_task.request.id, user_id, 'running', 45, 'preparing_context')
         
-        # Group chunks by file for better context
-        files_context = {}
-        for chunk in relevant_chunks:
-            file_path = chunk['file_path']
-            if file_path not in files_context:
-                files_context[file_path] = []
-            files_context[file_path].append(chunk)
-        
-        # Build context with file grouping
-        context_chunks = []
-        file_paths = []
-        for file_path, file_chunks in files_context.items():
-            file_paths.append(file_path)
-            # Sort chunks by chunk_order for coherent reading
-            sorted_chunks = sorted(file_chunks, key=lambda x: x['chunk_order'])
-            
-            for chunk in sorted_chunks:
-                context_chunks.append({
-                    'file_path': file_path,
-                    'content': chunk['content'],
-                    'similarity': chunk['similarity']
-                })
+        # Group chunks by file for better context and build context with file grouping
+        file_paths, context_chunks = _build_context_chunks_internal(relevant_chunks)
         
         # Step 6: Generate patches with LLM
-        current_task.update_state(state='PROGRESS', meta={'step': 'generating_patches', 'progress': 60})
-        await _update_job_progress(current_task.request.id, user_id, 'running', 60, 'generating_patches')
+        current_task.update_state(state='PROGRESS', meta={'step': 'fetching_operations', 'progress': 60})
+        await _update_job_progress(current_task.request.id, user_id, 'running', 60, 'fetching_operations')
         
-        llm_response = await openai_service.generate_documentation_patches(
+        llm_response = await openai_service.generate_documentation_operations(
             user_query=query,
             relevant_chunks=context_chunks,
             file_paths=file_paths,
-            model="gpt-4"
+            model="gpt-4o-mini"
         )
         
         if not llm_response:
             raise Exception("Failed to generate patches from LLM")
         
-        # Step 7: Parse diffs and create suggestions
-        current_task.update_state(state='PROGRESS', meta={'step': 'creating_suggestions', 'progress': 80})
-        await _update_job_progress(current_task.request.id, user_id, 'running', 80, 'creating_suggestions')
+        # Step 7: Parse operations and validate them before creating suggestions
+        current_task.update_state(state='PROGRESS', meta={'step': 'validating_operations', 'progress': 70})
+        await _update_job_progress(current_task.request.id, user_id, 'running', 70, 'validating_operations')
         
         try:
+            # Parse the operations JSON
+            operations_json = parse_operations_json(llm_response)
+
+            # Step 8: Create suggestions from valid operations
+            current_task.update_state(state='PROGRESS', meta={'step': 'creating_suggestions', 'progress': 80})
+            await _update_job_progress(current_task.request.id, user_id, 'running', 80, 'creating_suggestions')
+            
             suggestions = await parse_llm_response_to_suggestions(
-                llm_response=llm_response,
+                operations_json=operations_json,
                 repo_id=repo_id,
                 user_id=user_id,
                 confidence=0.8,
-                model_used="gpt-4"
+                model_used="gpt-4o-mini"
             )
-        except DiffParseError as e:
-            logger.warning(f"Diff parsing failed: {e}")
+            
+        except OperationParseError as e:
+            logger.warning(f"Operations parsing failed: {e}")
             suggestions = []
         
-        # Step 8: Send notifications
+        # Step 9: Send notifications
         current_task.update_state(state='PROGRESS', meta={'step': 'sending_notifications', 'progress': 95})
         await _update_job_progress(current_task.request.id, user_id, 'running', 95, 'sending_notifications')
         
@@ -254,14 +226,14 @@ async def _run_query_internal(
             message=completion_message
         )
         
-        # Step 9: Complete
+        # Step 10: Complete
         current_task.update_state(state='SUCCESS', meta={'step': 'completed', 'progress': 100})
         await _update_job_progress(current_task.request.id, user_id, 'completed', 100, 'completed')
         
         return {
             "status": "completed",
             "suggestions_created": len(suggestions),
-            "files_modified": len(set(s['file_path'] for s in suggestions)),
+            "files_modified": len(set(s['file_path'] for s in suggestions)) if suggestions else 0,
             "chunks_analyzed": len(relevant_chunks),
             "query": query,
             "repo_id": repo_id,
@@ -271,8 +243,7 @@ async def _run_query_internal(
     except Exception as e:
         # Update job with failure status
         await _update_job_progress(current_task.request.id, user_id, 'failed', None, 'failed', str(e))
-        _set_task_failure_state(current_task, e)
-        
+
         # Update job metadata with failure info
         failure_message = f"Query failed: {str(e)}"
         await _update_job_completion(
@@ -392,3 +363,39 @@ async def _update_job_completion(task_id: str, user_id: str, suggestions_created
     except Exception as e:
         logger.error(f"Failed to update job completion metadata: {e}")
         # Don't fail the main query task if metadata update fails 
+        
+def _build_context_chunks_internal(relevant_chunks: List[Dict[str, Any]]) -> Tuple[List[str], List[Dict[str, Any]]]:
+    """
+    Build context chunks from relevant chunks
+    """
+    files_context = {}
+    for chunk in relevant_chunks:
+        file_path = chunk['file_path']
+        if file_path not in files_context:
+            files_context[file_path] = []
+        files_context[file_path].append(chunk)
+    
+    file_paths = []
+    context_chunks = []
+    
+    for file_path, file_chunks in files_context.items():
+            file_paths.append(file_path)
+            # Sort chunks by chunk_order for coherent reading
+            sorted_chunks = sorted(file_chunks, key=lambda x: x['chunk_order'])
+            
+            for chunk in sorted_chunks:
+                # Include line numbers in the context
+                start_line = chunk.get('start_line', 0)
+                end_line = chunk.get('end_line', 0)
+                line_info = f"[Lines {start_line}-{end_line}]" if start_line and end_line else ""
+                
+                context_chunks.append({
+                    'file_path': file_path,
+                    'content': chunk['content'],
+                    'similarity': chunk['similarity'],
+                    'start_line': start_line,
+                    'end_line': end_line,
+                    'line_info': line_info
+                })
+    
+    return file_paths, context_chunks

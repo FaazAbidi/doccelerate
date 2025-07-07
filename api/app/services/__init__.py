@@ -11,12 +11,12 @@ This module contains various service classes and utilities for:
 from .supabase_client import supabase_client
 from .storage import storage_service
 from .openai_client import openai_service
-from .diff_parser import parse_llm_response_to_suggestions, DiffParseError
+from .operations_parser import parse_llm_response_to_suggestions, OperationParseError
 
 __all__ = [
     "supabase_client",
     "storage_service",
     "openai_service",
     "parse_llm_response_to_suggestions",
-    "DiffParseError"
+    "OperationParseError"
 ] 

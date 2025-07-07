@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 import { getJobByTaskId, getActiveJobs } from '../actions/getJobStatus'
@@ -12,6 +12,7 @@ interface RealtimeUpdateCallbacks {
   onDirectoryTreeChanged?: () => void
   onNewSuggestions?: (repoId: string, suggestionCount: number) => void
   onQueryCompleted?: (repoId: string, taskId: string, suggestionsCreated: number, message?: string) => void
+  onIndexingCompleted?: () => void // Callback for when indexing completes
 }
 
 interface UseRealtimeUpdatesProps {
@@ -32,6 +33,18 @@ export function useRealtimeUpdates({ callbacks, currentQueryTaskId }: UseRealtim
     staleTime: 0, // Always fetch fresh data for recovery
   })
 
+  // Poll for active indexing jobs
+  const { data: activeIndexJobs } = useQuery({
+    queryKey: ['active-index-jobs'],
+    queryFn: () => getActiveJobs('index'),
+    enabled: !!session?.user?.id && !!callbacks.onIndexingCompleted,
+    refetchInterval: 5000, // Poll every 5 seconds
+    refetchOnWindowFocus: true,
+  })
+
+  // Track indexing jobs that were active
+  const [trackedIndexJobs, setTrackedIndexJobs] = useState<Record<string, boolean>>({})
+
   // Poll for the specific query job status every 2 seconds when we have a task_id
   const { data: currentJob } = useQuery({
     queryKey: ['query-job-status', currentQueryTaskId],
@@ -40,6 +53,39 @@ export function useRealtimeUpdates({ callbacks, currentQueryTaskId }: UseRealtim
     refetchInterval: 2000, // Poll every 2 seconds for active query
     refetchOnWindowFocus: false,
   })
+
+  // Handle indexing job completion
+  useEffect(() => {
+    if (!activeIndexJobs || !callbacks.onIndexingCompleted) return
+
+    // Check if any previously tracked jobs are now completed
+    Object.keys(trackedIndexJobs).forEach(jobId => {
+      const isStillActive = activeIndexJobs.some(job => job.task_id === jobId)
+      
+      // If job was active but now isn't, it completed
+      if (trackedIndexJobs[jobId] && !isStillActive) {
+        console.log('Indexing job completed:', jobId)
+        callbacks.onIndexingCompleted?.()
+        
+        // Remove from tracked jobs
+        setTrackedIndexJobs(prev => {
+          const newState = { ...prev }
+          delete newState[jobId]
+          return newState
+        })
+      }
+    })
+    
+    // Add any new active jobs to tracking
+    activeIndexJobs.forEach(job => {
+      if (!trackedIndexJobs[job.task_id]) {
+        setTrackedIndexJobs(prev => ({
+          ...prev,
+          [job.task_id]: true
+        }))
+      }
+    })
+  }, [activeIndexJobs, callbacks, trackedIndexJobs])
 
   // Handle job completion
   useEffect(() => {
@@ -80,14 +126,9 @@ export function useRealtimeUpdates({ callbacks, currentQueryTaskId }: UseRealtim
     }
   }, [currentJob, callbacks, currentQueryTaskId])
 
-  // Cleanup function for manual unsubscribe (for compatibility)
-  const cleanup = () => {
-    // No longer needed since we're using React Query
-  }
-
   return { 
-    cleanup,
     hasActiveQueryJobs: activeQueryJobs && activeQueryJobs.length > 0,
-    activeQueryJobs: activeQueryJobs || []
+    activeQueryJobs: activeQueryJobs || [],
+    currentJob: currentJob || null
   }
 } 

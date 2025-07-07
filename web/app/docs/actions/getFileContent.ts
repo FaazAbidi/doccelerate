@@ -51,13 +51,6 @@ export async function getFileContent(filePath: string): Promise<FileContentRespo
   if (!file) {
     console.log('getFileContent: File not found in database:', filePath)
     
-    // Let's also check what files exist for this repo
-    const allFiles = await prisma.file.findMany({
-      where: { repo_id: profile.active_repo_id },
-      select: { path: true, storage_key: true },
-      take: 10
-    })
-    
     return null
   }
 

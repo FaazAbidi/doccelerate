@@ -1,8 +1,9 @@
 'use client'
 
-import { FileSearch, Clock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { FileSearch, Clock, CheckCircle, AlertCircle, Loader2, Check } from 'lucide-react'
 import { Card } from '@/app/components/Card'
 import { Button } from '@/app/components/Button'
+import { cn } from '@/lib/utils'
 
 export interface IndexingProgress {
   step: string
@@ -12,6 +13,20 @@ export interface IndexingProgress {
   repo?: string
   branch?: string
   directory?: string
+  metadata?: {
+    soft_reindex?: boolean
+    [key: string]: any
+  }
+}
+
+interface IndexingProgressBarProps {
+  progress?: IndexingProgress
+  className?: string
+  /**
+   * When compact is true, the progress bar will be more minimal
+   * to fit above other UI elements like the directory tree sidebar
+   */
+  compact?: boolean
 }
 
 interface IndexingProgressProps {
@@ -30,6 +45,66 @@ const PROGRESS_STEPS = {
   'notifying': { label: 'Finalizing', description: 'Completing indexing process' },
   'completed': { label: 'Indexing complete', description: 'Repository is ready for queries' },
   'failed': { label: 'Indexing failed', description: 'An error occurred during indexing' }
+}
+
+export function IndexingProgressBar({ progress, className, compact = false }: IndexingProgressBarProps) {
+  if (!progress) return null
+  
+  const { step, progress: percent, status } = progress
+  
+  // Format step name for display
+  const formattedStep = step
+    .replace(/_/g, ' ')
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+  
+  return (
+    <div className={cn(
+      "bg-primary/5 backdrop-blur-sm border border-primary/20 rounded-lg",
+      compact ? "px-3 py-2" : "px-4 py-3",
+      className
+    )}>
+      <div className="flex items-center gap-2">
+        {status === 'PROGRESS' && (
+          <Loader2 className={cn("text-primary animate-spin", compact ? "w-4 h-4" : "w-5 h-5")} />
+        )}
+        {status === 'SUCCESS' && (
+          <Check className={cn("text-success", compact ? "w-4 h-4" : "w-5 h-5")} />
+        )}
+        {status === 'FAILURE' && (
+          <AlertCircle className={cn("text-accent", compact ? "w-4 h-4" : "w-5 h-5")} />
+        )}
+        
+        <div className="flex-1">
+          <div className="flex items-center justify-between mb-1">
+            <span className={cn(
+              "text-primary font-medium", 
+              compact ? "text-caption" : "text-body-sm"
+            )}>
+              {status === 'PROGRESS' ? `${formattedStep}...` : 
+               status === 'SUCCESS' ? 'Indexing Complete' : 
+               'Indexing Failed'}
+            </span>
+            
+            {!compact && (
+              <span className="text-caption text-neutral/60">{percent}%</span>
+            )}
+          </div>
+          
+          <div className="w-full bg-neutral/10 rounded-full h-1.5">
+            <div
+              className={cn(
+                "h-1.5 rounded-full",
+                status === 'FAILURE' ? "bg-accent" : "bg-primary"
+              )}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function IndexingProgress({ progress, onCancel, onRetry }: IndexingProgressProps) {

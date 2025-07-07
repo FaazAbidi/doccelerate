@@ -59,4 +59,56 @@ export async function startIndexing(): Promise<StartIndexingResponse> {
       message: error instanceof Error ? error.message : "Failed to start repository indexing"
     }
   }
+}
+
+/**
+ * Starts a soft re-indexing process that only regenerates chunks and embeddings
+ * without re-downloading files from GitHub. This is useful after accepting suggestions
+ * to update the search index with the new content.
+ * 
+ * @returns Promise<StartIndexingResponse> - The response from the indexing service
+ */
+export async function startSoftReindexing(): Promise<StartIndexingResponse> {
+  const userId = await getUserUuid()
+  if (!userId) {
+    throw new Error("Not authenticated")
+  }
+
+  try {
+    // Call the backend indexing API with soft_reindex=true
+    console.log(`${config.apiBaseUrl}/index (soft re-index)`)
+    const response = await fetch(`${config.apiBaseUrl}/index`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        soft_reindex: true
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.detail || `API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    
+    return {
+      success: true,
+      task_id: data.task_id,
+      status: data.status,
+      repo: data.repo,
+      branch: data.branch,
+      directory: data.directory,
+      message: "Soft re-indexing started successfully"
+    }
+  } catch (error) {
+    console.error('Failed to start soft re-indexing:', error)
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to start soft re-indexing"
+    }
+  }
 } 

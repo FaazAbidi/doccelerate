@@ -48,7 +48,16 @@ class SupabaseService:
                 "content-type": content_type
             }
             
-            # Simple upload - Supabase storage will handle overwrites automatically
+            # Check if file exists first
+            try:
+                # Try to delete the file first if it exists and upsert is True
+                if upsert:
+                    self._client.storage.from_(bucket).remove([path])
+            except Exception:
+                # Ignore errors if file doesn't exist
+                pass
+                
+            # Upload the file (now that any existing file has been removed)
             self._client.storage.from_(bucket).upload(
                 path=path,
                 file=content,
