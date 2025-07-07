@@ -54,3 +54,25 @@ db-generate:
 db-sync:
 	$(MAKE) db-pull
 	$(MAKE) db-generate
+
+# Railway deployment commands
+railway-login:
+	railway login
+
+railway-init:
+	railway init
+
+railway-deploy:
+	railway up
+
+railway-logs-api:
+	railway logs --service api
+
+railway-logs-web:
+	railway logs --service web
+
+railway-logs-worker:
+	railway logs --service celery-worker
+
+railway-status:
+	railway status
