@@ -1,4 +1,4 @@
-.PHONY: api web up db-pull db-generate db-sync
+.PHONY: api web up docker-up docker-down docker-build docker-logs db-pull db-generate db-sync
 
 api:
 	cd api && uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -6,9 +6,25 @@ api:
 web:
 	cd web && npm run dev
 
-# Run API and Web concurrently
+# Run API and Web concurrently (local)
 up:
 	$(MAKE) -j 2 api web
+
+# Docker commands
+docker-build:
+	docker-compose build
+
+docker-up:
+	docker-compose up -d
+
+docker-down:
+	docker-compose down
+
+docker-logs:
+	docker-compose logs -f
+
+docker-dev:
+	docker-compose up --build
 
 # Sync database schema from Supabase for API
 db-pull-api:
