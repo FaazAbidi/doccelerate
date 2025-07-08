@@ -306,7 +306,7 @@ class OpenAIService:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.1,  # Low temperature for consistent output
-                max_tokens=50000   # Plenty for several patches, keeps us safe
+                max_tokens=5000   # Plenty for several patches, keeps us safe
             )
             
             return response.choices[0].message.content
