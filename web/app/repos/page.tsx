@@ -190,7 +190,7 @@ export default function ReposPage() {
                 <Button
                     variant="outline"
                     size="md"
-                    className="bg-transparent border-neutral/10 hover:bg-neutral/10 hover:border-neutral/20 hover:text-neutral"
+                    className="bg-transparent border-neutral/10 hover:border-neutral/20 hover:text-neutral hover:bg-orange-500/10"
                   >
                     <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
                    <p className="text-sm text-neutral font-medium">Read-only mode</p>
