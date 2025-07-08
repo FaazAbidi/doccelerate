@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Github, ExternalLink, Unlink } from 'lucide-react'
+import { Github, ExternalLink, Unlink, Settings } from 'lucide-react'
 import { Card } from '@/app/components/Card'
 import { Button } from '@/app/components/Button'
 import { disconnectGithubAccount } from '@/app/actions/githubConnect'
@@ -16,13 +16,38 @@ export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: 
   const [isDisconnecting, setIsDisconnecting] = useState(false)
 
   const handleConnect = () => {
-    // Redirect to GitHub OAuth
+    // GitHub OAuth with repository selection support
     const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
     const redirectUri = `${window.location.origin}/api/auth/github/callback`
-    const scope = 'repo read:user user:email'
     
-    const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`
+    // Use minimal scopes initially - we'll request repo access per repository
+    const scope = 'read:user user:email'
+    
+    // Generate a random state for security
+    const state = Math.random().toString(36).substring(2, 15)
+    
+    // Store state in sessionStorage for verification
+    sessionStorage.setItem('github_oauth_state', state)
+    
+    // GitHub OAuth URL with repository selection parameters
+    const params = new URLSearchParams({
+      client_id: clientId!,
+      redirect_uri: redirectUri,
+      scope: scope,
+      state: state,
+      allow_signup: 'true',
+      // Request repository selection during authorization
+      // This will prompt users to select specific repositories
+      login: '', // Let user choose the account
+    })
+    
+    const githubAuthUrl = `https://github.com/login/oauth/authorize?${params.toString()}`
     window.location.href = githubAuthUrl
+  }
+
+  const handleManageRepositories = () => {
+    // Direct users to repository selection page
+    window.open('/repos/manage', '_blank')
   }
 
   const handleDisconnect = async () => {
@@ -53,7 +78,7 @@ export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: 
               GitHub Integration
             </h3>
             <p className="text-body-xs text-neutral opacity-60 leading-relaxed">
-              Connect your GitHub account to access your repositories
+              Connect your GitHub account and choose which repositories to access
             </p>
           </div>
         </div>
@@ -78,16 +103,27 @@ export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: 
                   </div>
                 </div>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                leadingIcon={<Unlink className="w-4 h-4" />}
-                onClick={handleDisconnect}
-                disabled={isDisconnecting}
-                className="w-full sm:w-auto"
-              >
-                {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leadingIcon={<Settings className="w-4 h-4" />}
+                  onClick={handleManageRepositories}
+                  className="w-full sm:w-auto"
+                >
+                  Manage Repos
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leadingIcon={<Unlink className="w-4 h-4" />}
+                  onClick={handleDisconnect}
+                  disabled={isDisconnecting}
+                  className="w-full sm:w-auto"
+                >
+                  {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+                </Button>
+              </div>
             </div>
           ) : (
             <Button

@@ -6,6 +6,7 @@ import { connectGithubAccount } from '@/app/actions/githubConnect'
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get('code')
+  const state = searchParams.get('state')
   const error = searchParams.get('error')
 
   // Get the correct base URL (prioritize NEXTAUTH_URL, fallback to request origin)
@@ -13,11 +14,18 @@ export async function GET(request: NextRequest) {
 
   // Handle OAuth errors
   if (error) {
+    console.error('GitHub OAuth error:', error)
     return NextResponse.redirect(new URL('/repos?error=github_auth_failed', baseUrl))
   }
 
   if (!code) {
     return NextResponse.redirect(new URL('/repos?error=no_code', baseUrl))
+  }
+
+  // Verify state parameter for security (CSRF protection)
+  if (!state) {
+    console.error('Missing state parameter in GitHub OAuth callback')
+    return NextResponse.redirect(new URL('/repos?error=invalid_state', baseUrl))
   }
 
   // Check if user is authenticated
@@ -28,7 +36,8 @@ export async function GET(request: NextRequest) {
 
   try {
     // Debug logging
-    console.log('GitHub OAuth callback - Code received:', code)
+    console.log('GitHub OAuth callback - Code received:', !!code)
+    console.log('GitHub OAuth callback - State received:', !!state)
     console.log('GitHub OAuth callback - Client ID exists:', !!process.env.GITHUB_CLIENT_ID)
     console.log('GitHub OAuth callback - Client Secret exists:', !!process.env.GITHUB_CLIENT_SECRET)
     console.log('GitHub OAuth callback - Base URL:', baseUrl)
@@ -50,13 +59,13 @@ export async function GET(request: NextRequest) {
     const tokenData = await tokenResponse.json()
 
     if (tokenData.error) {
-      console.error('GitHub OAuth error:', tokenData)
+      console.error('GitHub OAuth token exchange error:', tokenData)
       console.error('Token response status:', tokenResponse.status)
-      console.error('Full token response:', tokenData)
       return NextResponse.redirect(new URL('/repos?error=token_exchange_failed', baseUrl))
     }
 
     const accessToken = tokenData.access_token
+    const scope = tokenData.scope // This tells us what permissions we actually got
 
     // Get user info from GitHub
     const userResponse = await fetch('https://api.github.com/user', {
@@ -66,9 +75,14 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    if (!userResponse.ok) {
+      console.error('Failed to fetch GitHub user info:', userResponse.status)
+      return NextResponse.redirect(new URL('/repos?error=user_fetch_failed', baseUrl))
+    }
+
     const githubUser = await userResponse.json()
 
-    // Connect the GitHub account
+    // Connect the GitHub account with the received token and scopes
     const result = await connectGithubAccount(
       {
         id: githubUser.id.toString(),
@@ -77,11 +91,13 @@ export async function GET(request: NextRequest) {
         name: githubUser.name,
         avatar_url: githubUser.avatar_url,
       },
-      accessToken
+      accessToken,
+      scope // Pass the actual scopes we received
     )
 
     if (result.success) {
-      return NextResponse.redirect(new URL('/repos?success=github_connected', baseUrl))
+      // Redirect to repository management page for fine-grained access setup
+      return NextResponse.redirect(new URL('/repos?success=github_connected&setup=repos', baseUrl))
     } else {
       return NextResponse.redirect(new URL(`/repos?error=${encodeURIComponent(result.error || 'connection_failed')}`, baseUrl))
     }

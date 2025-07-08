@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
-import { RefreshCw, Github, Plus, Search, X } from 'lucide-react'
+import { RefreshCw, Github, Plus, Search, X, Settings } from 'lucide-react'
 import { Button } from '@/app/components/Button'
 import { Card } from '@/app/components/Card'
 import { TextInput } from '@/app/components/TextInput'
@@ -17,6 +17,7 @@ import { getUserRepos, UserRepository } from './actions/getUserRepos'
 import { ensureProfile } from '../actions/ensureProfile'
 import { getGithubProfile } from '../actions/getGithubProfile'
 import { PageLoader } from '../components/PageLoader'
+import Link from 'next/link'
 
 export default function ReposPage() {
   const { data: session, status } = useSession()
@@ -165,6 +166,15 @@ export default function ReposPage() {
                 >
                   {isSyncing ? 'Syncing...' : 'Sync GitHub Repos'}
                 </Button>
+                <Link href="/repos/manage">
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    leadingIcon={<Settings className="w-5 h-5" />}
+                  >
+                    Manage Access
+                  </Button>
+                </Link>
                 <Button
                   variant="secondary"
                   size="md"

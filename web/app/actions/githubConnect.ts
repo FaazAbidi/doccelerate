@@ -16,7 +16,8 @@ export type GithubUserData = {
  */
 export async function connectGithubAccount(
   githubUser: GithubUserData,
-  accessToken: string
+  accessToken: string,
+  scope?: string // Optional scope parameter to track permissions
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const userId = await getUserUuid()
@@ -51,6 +52,11 @@ export async function connectGithubAccount(
         github_avatar_url: githubUser.avatar_url,
       }
     })
+
+    // Log the scope for debugging - we can add scope storage to database later
+    if (scope) {
+      console.log(`GitHub OAuth completed for user ${githubUser.login} with scope: ${scope}`)
+    }
 
     return { success: true }
   } catch (error) {
