@@ -82,6 +82,8 @@ export async function disconnectGithubAccount(): Promise<{ success: boolean; err
         github_username: null,
         github_access_token: null,
         github_avatar_url: null,
+        active_repo_id: null,
+        active_branch: null,
         updated_at: new Date(),
       }
     })
