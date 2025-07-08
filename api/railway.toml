@@ -3,9 +3,7 @@ builder = "NIXPACKS"
 
 [deploy]
 restartPolicyType = "ON_FAILURE"
-healthcheckPath = "/api/v1/health/"
-healthcheckTimeout = 300
 
 [variables]
 PYTHONDONTWRITEBYTECODE = "1"
-PYTHONUNBUFFERED = "1" 
+PYTHONUNBUFFERED = "1"
