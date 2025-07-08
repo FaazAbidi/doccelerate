@@ -222,8 +222,7 @@ export function DirectoryTreeSidebar({
   
   // Listen for file update events from suggestion acceptance
   useEffect(() => {
-    const handleFileUpdated = async (e: Event) => {
-      const customEvent = e as CustomEvent<{filePath: string}>
+    const handleFileUpdated = async () => {
       // First refresh the tree to show the updated files with forced refresh
       await loadTree(true)
       // Then explicitly check for modified files to update the re-index notification
@@ -273,7 +272,7 @@ export function DirectoryTreeSidebar({
         console.log('Directory tree changed, reloading...')
         loadTree()
       },
-      onFileUpdated: (filePath) => {
+      onFileUpdated: () => {
         loadTree()
       },
       // Add listener for indexing completion
