@@ -58,7 +58,7 @@ class OpenAIService:
         """
         return len(self._encoding.encode(text))
     
-    def split_text_by_tokens(self, text: str, max_tokens: int = 1000, overlap_tokens: int = 100) -> List[str]:
+    def split_text_by_tokens(self, text: str, max_tokens: int = 300, overlap_tokens: int = 75) -> List[str]:
         """
         Split text into chunks based on token count with overlap
         
@@ -272,12 +272,7 @@ class OpenAIService:
             Raw LLM response with operations JSON or None if failed
         """
         try:
-            # -----------------------------------------------------------------
-            # Build DOCUMENTATION CONTEXT but respect the model's 8k-token
-            # limit. We leave ~1.5k tokens for the system/user prompts and
-            # the model's reply, so we cap the context at ~6.5k tokens.
-            # -----------------------------------------------------------------
-            token_budget = 50_500
+            token_budget = 6_500
             context_parts = []
             current_tokens = 0
 
@@ -310,7 +305,7 @@ class OpenAIService:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.1,  # Low temperature for consistent output
+                temperature=0,  # Low temperature for consistent output
                 max_tokens=5000   # Plenty for several patches, keeps us safe
             )
             

@@ -105,9 +105,6 @@ export default function DocsPage() {
     console.log('🎯 Setting isProcessingQuery to false')
     setIsProcessingQuery(false)
 
-    // Note: We don't manually call fetchSuggestions() here anymore
-    // The suggestions should already be refreshed by the handleNewSuggestions callback
-    // which is triggered by the useRealtimeUpdates hook when new suggestions are created
   }, [isProcessingQuery])
 
   // Setup realtime updates for the docs page
@@ -174,10 +171,6 @@ export default function DocsPage() {
       console.log('🚀 Setting currentQueryTaskId to:', taskId)
       setCurrentQueryTaskId(taskId)
       
-      // The API now returns 202 Accepted with a task_id
-      // Suggestions will come later via real-time updates
-      // So we don't need to add suggestions immediately anymore
-      
     } catch (error) {
       console.error('Failed to process AI query:', error)
       console.log('🚀 Query failed, setting isProcessingQuery to false')
@@ -189,10 +182,8 @@ export default function DocsPage() {
       setCurrentQueryTaskId(null)
       setIsProcessingQuery(false)
       setQueryStatus('error')
-      // TODO: Add proper error notification/toast
     }
-    // Note: Don't set isProcessingQuery to false here - let the completion handler do it
-  }, []) // Removed addSuggestions dependency since we don't use it anymore
+  }, [])
 
   // Handle navigation to files with suggestions
   const handleNavigateToFile = useCallback((filePath: string) => {

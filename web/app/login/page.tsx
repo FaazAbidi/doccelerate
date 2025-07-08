@@ -130,7 +130,7 @@ function LoginInner() {
 
 export default function Login() {
   return (
-    <Suspense fallback={<div />}> {/* Suspense boundary for useSearchParams */}
+    <Suspense fallback={<div />}>
       <LoginInner />
     </Suspense>
   )

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import "../styles/globals.css";
-import DotGrid from "./components/dot-grid";
-import Navbar from "./components/navbar";
-import { AuthProvider } from "./components/auth-provider";
+import DotGrid from "./components/DotGrid";
+import Navbar from "./components/Navbar";
+import { AuthProvider } from "./components/AuthProvider";
 import Providers from "./providers";
 
 export const metadata: Metadata = {

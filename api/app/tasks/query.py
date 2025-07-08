@@ -125,7 +125,7 @@ async def _run_query_internal(
             query_embedding=query_embedding,
             repo_id=repo_id,
             limit=30,  # Get more chunks for better context
-            similarity_threshold=0.5  # Lower threshold for broader search
+            similarity_threshold=0.6  # Lower threshold for broader search
         )
         
         # Fallback: try lexical full-text search if vector search returned nothing
