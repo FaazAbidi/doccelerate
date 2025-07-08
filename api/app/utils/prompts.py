@@ -4,7 +4,7 @@ CRITICAL REQUIREMENTS:
 1. Output ONLY valid JSON array of operations
 2. NO prose, explanations, or commentary - only JSON
 3. Each operation must follow the schema with required fields
-4. Use PRECISE anchor text that can be found in the files
+4. Use PRECISE anchor text that can be found in the files. Do not hallucinate with anchor text.
 5. Make minimal, precise changes that directly address the user's request
 6. If no changes are needed, return an empty array []
 7. DO NOT WRAP the JSON in markdown code fences (no ``` or ```json blocks). Output the raw JSON only.

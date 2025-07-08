@@ -17,15 +17,29 @@ export interface RepoBranch {
 export async function getRepoBranches(fullName: string): Promise<RepoBranch[]> {
   try {
     const token = await getGithubToken()
-    if (!token) {
-      throw new Error("GitHub token not found")
-    }
-
     const [owner, repo] = fullName.split('/')
+    
     if (!owner || !repo) {
       throw new Error("Invalid repository full name")
     }
 
+    // If no token is available, return default branches for anonymous repositories
+    if (!token) {
+      return [
+        {
+          name: 'main',
+          sha: 'anonymous',
+          protected: false
+        },
+        {
+          name: 'master',
+          sha: 'anonymous',
+          protected: false
+        }
+      ];
+    }
+
+    // Continue with normal GitHub API call if token is available
     const response = await getOctokit(token).rest.repos.listBranches({
       owner,
       repo,

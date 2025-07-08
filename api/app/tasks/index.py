@@ -45,7 +45,7 @@ def process_indexing(
     github_full_name: str,
     branch: str,
     docs_directory: str,
-    github_access_token: str,
+    github_access_token: str = None,
     soft_reindex: bool = False
 ):
     """
@@ -94,7 +94,7 @@ async def _run_indexing_internal(
     github_full_name: str,
     branch: str,
     docs_directory: str,
-    github_access_token: str,
+    github_access_token: str = None,
     soft_reindex: bool = False
 ):
     """
@@ -245,7 +245,7 @@ async def _run_indexing_internal(
             await prisma.disconnect()
 
 
-async def _clone_repository(github_full_name: str, branch: str, docs_directory: str, temp_dir: str, github_access_token: str) -> str:
+async def _clone_repository(github_full_name: str, branch: str, docs_directory: str, temp_dir: str, github_access_token: str = None) -> str:
     """
     Perform sparse shallow clone of repository
     """
@@ -253,7 +253,13 @@ async def _clone_repository(github_full_name: str, branch: str, docs_directory: 
     # the library does not pick up Kombu's LoggingProxy objects (they lack
     # ``fileno``).
     from git import Repo  # noqa: WPS433 (runtime import justified)
-    repo_url = f"https://{github_access_token}@github.com/{github_full_name}.git"
+    
+    # Use authenticated URL if token is available, otherwise use anonymous HTTPS
+    if github_access_token:
+        repo_url = f"https://{github_access_token}@github.com/{github_full_name}.git"
+    else:
+        repo_url = f"https://github.com/{github_full_name}.git"
+    
     repo_path = os.path.join(temp_dir, "repo")
     
     # Clone with sparse checkout

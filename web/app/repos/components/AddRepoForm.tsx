@@ -8,9 +8,10 @@ import { TextInput } from '@/app/components/TextInput'
 
 interface AddRepoFormProps {
   onAddRepo: (fullName: string) => Promise<void>
+  hasGithubConnection?: boolean
 }
 
-export function AddRepoForm({ onAddRepo }: AddRepoFormProps) {
+export function AddRepoForm({ onAddRepo, hasGithubConnection = false }: AddRepoFormProps) {
   const [fullName, setFullName] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [error, setError] = useState('')
@@ -55,6 +56,13 @@ export function AddRepoForm({ onAddRepo }: AddRepoFormProps) {
           <p className="text-body-xs text-neutral opacity-60 mt-1">
             Enter the full name of a public GitHub repository
           </p>
+          {!hasGithubConnection && (
+            <div className="mt-2 p-2 bg-transparent border border-orange-500/20 rounded-[20px]">
+              <p className="text-xs text-secondary">
+                <strong>Read-only mode:</strong> You can view and edit documentation, but won&apos;t be able to commit changes back to GitHub.
+              </p>
+            </div>
+          )}
           {error && (
             <p className="text-body-sm text-error mt-2">{error}</p>
           )}

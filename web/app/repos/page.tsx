@@ -13,11 +13,13 @@ import { RepoSettingsCard } from './components/RepoSettingsCard'
 import { GithubConnect } from '../components/GithubConnect'
 import { syncUserRepos } from './actions/syncUserRepos'
 import { addPublicRepo } from './actions/addPublicRepo'
+import { addPublicRepoAnonymous } from './actions/addPublicRepoAnonymous'
 import { getUserRepos, UserRepository } from './actions/getUserRepos'
 import { ensureProfile } from '../actions/ensureProfile'
 import { getGithubProfile } from '../actions/getGithubProfile'
 import { PageLoader } from '../components/PageLoader'
 import Link from 'next/link'
+import { Tooltip } from '../components/Tooltip'
 
 export default function ReposPage() {
   const { data: session, status } = useSession()
@@ -95,6 +97,12 @@ export default function ReposPage() {
     setShowAddForm(false)
   }
 
+  const handleAddPublicRepoAnonymous = async (fullName: string) => {
+    await addPublicRepoAnonymous(fullName)
+    await fetchRepos()
+    setShowAddForm(false)
+  }
+
   const handleSetActive = (repository: UserRepository) => {
     setSelectedRepository(repository)
     setIsModalOpen(true)
@@ -140,7 +148,7 @@ export default function ReposPage() {
           <div className="mb-6">
             <h1 className="text-heading-xl text-neutral mb-2">Repositories</h1>
             <p className="text-body-lg text-neutral opacity-80">
-              Connect your GitHub account and manage your repositories. Select which one to use for documentation.
+              Add and manage your repositories. Connect GitHub for full functionality or add public repositories to get started.
             </p>
           </div>
 
@@ -154,36 +162,50 @@ export default function ReposPage() {
           </div>
 
           {/* Actions Row */}
-          {hasGithubConnection && (
-            <div className="flex flex-col lg:flex-row gap-4 mb-6">
-              <div className="flex flex-col sm:flex-row gap-4 flex-1">
-                <Button
-                  variant="primary"
-                  size="md"
-                  leadingIcon={<RefreshCw className="w-5 h-5" />}
-                  onClick={handleSyncRepos}
-                  disabled={isSyncing}
-                >
-                  {isSyncing ? 'Syncing...' : 'Sync GitHub Repos'}
-                </Button>
-                <Link href="/repos/manage">
+          <div className="flex flex-col lg:flex-row gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row gap-4 flex-1">
+              {hasGithubConnection ? (
+                <>
                   <Button
-                    variant="secondary"
+                    variant="primary"
                     size="md"
-                    leadingIcon={<Settings className="w-5 h-5" />}
+                    leadingIcon={<RefreshCw className="w-5 h-5" />}
+                    onClick={handleSyncRepos}
+                    disabled={isSyncing}
                   >
-                    Manage Access
+                    {isSyncing ? 'Syncing...' : 'Sync GitHub Repos'}
                   </Button>
-                </Link>
+                  <Link href="/repos/manage">
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      leadingIcon={<Settings className="w-5 h-5" />}
+                    >
+                      Manage Access
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <Tooltip content="Connect GitHub to commit changes back to repositories">
                 <Button
-                  variant="secondary"
-                  size="md"
-                  leadingIcon={<Plus className="w-5 h-5" />}
-                  onClick={() => setShowAddForm(!showAddForm)}
-                >
-                  Add Public Repo
-                </Button>
-              </div>
+                    variant="outline"
+                    size="md"
+                    className="bg-transparent border-neutral/10 hover:bg-neutral/10 hover:border-neutral/20 hover:text-neutral"
+                  >
+                    <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
+                   <p className="text-sm text-neutral font-medium">Read-only mode</p>
+                  </Button>
+                </Tooltip>
+              )}
+              <Button
+                variant="secondary"
+                size="md"
+                leadingIcon={<Plus className="w-5 h-5" />}
+                onClick={() => setShowAddForm(!showAddForm)}
+              >
+                Add Public Repo
+              </Button>
+            </div>
               
               {/* Search Bar */}
               {repositories.length > 0 && (
@@ -208,12 +230,14 @@ export default function ReposPage() {
                 </div>
               )}
             </div>
-          )}
 
           {/* Add Form */}
           {showAddForm && (
             <div className="mb-6">
-              <AddRepoForm onAddRepo={handleAddPublicRepo} />
+              <AddRepoForm 
+                onAddRepo={hasGithubConnection ? handleAddPublicRepo : handleAddPublicRepoAnonymous} 
+                hasGithubConnection={hasGithubConnection}
+              />
             </div>
           )}
         </div>
@@ -308,15 +332,79 @@ export default function ReposPage() {
               )}
             </>
           ) : (
-            <div className="flex items-center justify-center h-full">
-              <Card variant="default" className="text-center py-12 max-w-md">
-                <Github className="w-12 h-12 text-neutral opacity-40 mx-auto mb-4" />
-                <h3 className="text-heading-md text-neutral mb-2">Connect your GitHub account</h3>
-                <p className="text-body-md text-neutral opacity-80">
-                  Connect your GitHub account to access and manage your repositories.
-                </p>
-              </Card>
-            </div>
+            <>
+              {repositories.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <Card variant="default" className="text-center py-12 max-w-md">
+                    <Github className="w-12 h-12 text-neutral opacity-40 mx-auto mb-4" />
+                    <h3 className="text-heading-md text-neutral mb-2">Add a public repository</h3>
+                    <p className="text-body-md text-neutral opacity-80 mb-6">
+                      Add any public GitHub repository to get started. You can view and edit docs, but connecting GitHub enables committing changes back.
+                    </p>
+                    <Button variant="secondary" size="md" onClick={() => setShowAddForm(true)}>
+                      Add Public Repo
+                    </Button>
+                  </Card>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col">
+                  {/* Results Summary */}
+                  <div className="flex-shrink-0 mb-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-body-md text-neutral opacity-80">
+                        {searchQuery ? (
+                          <>
+                            Showing {filteredRepositories.length} of {repositories.length} repositories
+                            {filteredRepositories.length !== repositories.length && (
+                              <span className="ml-2 text-body-sm">
+                                matching &quot;{searchQuery}&quot;
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          `${repositories.length} repositories`
+                        )}
+                      </p>
+                      {activeRepoId && (
+                        <div className="flex items-center text-body-sm text-neutral opacity-70">
+                          <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
+                          Active repository selected
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Repositories Grid - Scrollable */}
+                  <div className="flex-1 overflow-y-auto pr-2">
+                    {filteredRepositories.length === 0 ? (
+                      <div className="flex items-center justify-center h-full">
+                        <Card variant="default" className="text-center py-12 max-w-md">
+                          <Search className="w-12 h-12 text-neutral opacity-40 mx-auto mb-4" />
+                          <h3 className="text-heading-md text-neutral mb-2">No matching repositories</h3>
+                          <p className="text-body-md text-neutral opacity-80 mb-6">
+                            No repositories found matching &quot;{searchQuery}&quot;. Try adjusting your search terms.
+                          </p>
+                          <Button variant="secondary" size="md" onClick={clearSearch}>
+                            Clear Search
+                          </Button>
+                        </Card>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 pb-4">
+                        {filteredRepositories.map((repo) => (
+                          <RepoCard
+                            key={repo.id}
+                            repository={repo}
+                            onSetActive={handleSetActive}
+                            isSettingActive={false}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

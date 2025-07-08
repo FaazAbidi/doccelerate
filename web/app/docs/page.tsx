@@ -14,6 +14,8 @@ import { AINavigationControls } from './components/AINavigationControls'
 import { sendAIQuery } from './actions/sendAIQuery'
 import { useQueryClient } from '@tanstack/react-query'
 import { applyAndAcceptSuggestion } from './actions/manageSuggestions'
+import { checkGithubConnection } from './actions/checkGithubConnection'
+import { Tooltip } from '../components/Tooltip'
 
 export default function DocsPage() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -25,6 +27,7 @@ export default function DocsPage() {
   // New status for AI queries to drive chatbox feedback
   const [queryStatus, setQueryStatus] = useState<'idle' | 'processing' | 'no_suggestions' | 'error'>('idle')
   const [currentQueryTaskId, setCurrentQueryTaskId] = useState<string | null>(null)
+  const [hasGithubConnection, setHasGithubConnection] = useState<boolean>(false)
   const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   
@@ -223,6 +226,20 @@ export default function DocsPage() {
   // New: consider sidebar OR AI navigation visibility when calculating editor width
   const leftPanelVisible = isSidebarOpen || showAINavigation
 
+  // Fetch GitHub connection status
+  useEffect(() => {
+    const fetchGithubConnection = async () => {
+      try {
+        const connected = await checkGithubConnection()
+        setHasGithubConnection(connected)
+      } catch (error) {
+        console.error('Failed to check GitHub connection:', error)
+        setHasGithubConnection(false)
+      }
+    }
+    fetchGithubConnection()
+  }, [])
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -288,6 +305,15 @@ export default function DocsPage() {
   if (status?.isIndexed && (indexingState.phase === 'idle' || isSoftReindexJob)) {
     return (
       <div className="h-screen bg-transparent overflow-hidden">
+        {/* Read-only mode indicator */}
+        {!hasGithubConnection && (
+          <Tooltip content="Connect GitHub to commit changes back to repositories">
+            <div className="fixed top-10 right-0 transform -translate-x-1/2 z-40 bg-transparent border border-orange-500/20 rounded-[20px] px-4 py-2 flex justify-center items-center gap-3 shadow-lg backdrop-blur-sm">
+              <p className="text-xs text-orange-700 font-medium">Read-only mode</p>
+            </div>
+          </Tooltip>
+        )}
+
         {/* Sidebar & AI navigation stacked */}
         <div className="fixed left-4 top-1/2 -translate-y-1/2 z-50 flex flex-col gap-4">
           <DirectoryTreeSidebar
@@ -296,6 +322,7 @@ export default function DocsPage() {
             onOpenChange={setIsSidebarOpen}
             hasSuggestions={showAINavigation}
             floating={false}
+            hasGithubConnection={hasGithubConnection}
             onStartReIndexing={async () => {
               console.log('🔄 Hard re-indexing called from DirectoryTreeSidebar refresh button')
               try {

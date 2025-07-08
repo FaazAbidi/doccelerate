@@ -197,6 +197,7 @@ export default function ManageRepositoriesPage() {
                 </div>
                 <Button
                   variant="primary"
+                  className="p-6 text-sm"
                   onClick={handleSaveChanges}
                   disabled={isUpdating}
                   leadingIcon={isUpdating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
