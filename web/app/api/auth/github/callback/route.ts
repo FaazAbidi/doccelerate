@@ -8,22 +8,31 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const error = searchParams.get('error')
 
+  // Get the correct base URL (prioritize NEXTAUTH_URL, fallback to request origin)
+  const baseUrl = process.env.NEXTAUTH_URL || request.nextUrl.origin
+
   // Handle OAuth errors
   if (error) {
-    return NextResponse.redirect(new URL('/repos?error=github_auth_failed', request.url))
+    return NextResponse.redirect(new URL('/repos?error=github_auth_failed', baseUrl))
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/repos?error=no_code', request.url))
+    return NextResponse.redirect(new URL('/repos?error=no_code', baseUrl))
   }
 
   // Check if user is authenticated
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
-    return NextResponse.redirect(new URL('/login?error=not_authenticated', request.url))
+    return NextResponse.redirect(new URL('/login?error=not_authenticated', baseUrl))
   }
 
   try {
+    // Debug logging
+    console.log('GitHub OAuth callback - Code received:', code)
+    console.log('GitHub OAuth callback - Client ID exists:', !!process.env.GITHUB_CLIENT_ID)
+    console.log('GitHub OAuth callback - Client Secret exists:', !!process.env.GITHUB_CLIENT_SECRET)
+    console.log('GitHub OAuth callback - Base URL:', baseUrl)
+
     // Exchange code for access token
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
@@ -42,7 +51,9 @@ export async function GET(request: NextRequest) {
 
     if (tokenData.error) {
       console.error('GitHub OAuth error:', tokenData)
-      return NextResponse.redirect(new URL('/repos?error=token_exchange_failed', request.url))
+      console.error('Token response status:', tokenResponse.status)
+      console.error('Full token response:', tokenData)
+      return NextResponse.redirect(new URL('/repos?error=token_exchange_failed', baseUrl))
     }
 
     const accessToken = tokenData.access_token
@@ -70,13 +81,13 @@ export async function GET(request: NextRequest) {
     )
 
     if (result.success) {
-      return NextResponse.redirect(new URL('/repos?success=github_connected', request.url))
+      return NextResponse.redirect(new URL('/repos?success=github_connected', baseUrl))
     } else {
-      return NextResponse.redirect(new URL(`/repos?error=${encodeURIComponent(result.error || 'connection_failed')}`, request.url))
+      return NextResponse.redirect(new URL(`/repos?error=${encodeURIComponent(result.error || 'connection_failed')}`, baseUrl))
     }
 
   } catch (error) {
     console.error('GitHub OAuth callback error:', error)
-    return NextResponse.redirect(new URL('/repos?error=callback_failed', request.url))
+    return NextResponse.redirect(new URL('/repos?error=callback_failed', baseUrl))
   }
 } 
