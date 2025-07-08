@@ -177,6 +177,5 @@ Most of the stack lives on Railway’s free tier – it was the quickest way to 
 
 ---
 
-## 📄 License
-
-[MIT](LICENSE) – © 2024 Pluno AI challenge submission by **Faaz Abidi**. 
+## 📄 Footnotes
+Pluno AI challenge submission by **Faaz Abidi**. 
