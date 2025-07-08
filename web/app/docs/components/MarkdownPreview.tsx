@@ -230,7 +230,7 @@ export function MarkdownPreview({ content, className = '' }: MarkdownPreviewProp
     <div className={`prose prose-neutral max-w-none p-6 ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[rehypeRaw, rehypeSlug, [rehypeAutolinkHeadings, {behavior: 'wrap'}], rehypeHighlight]}
+        rehypePlugins={[rehypeRaw, rehypeSlug, [rehypeAutolinkHeadings, {behavior: 'append'}], rehypeHighlight]}
         components={markdownComponents as any}
       >
         {content}

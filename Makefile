@@ -6,9 +6,21 @@ api:
 web:
 	cd web && npm run dev
 
-# Run API and Web concurrently (local)
+# Run Celery worker separately
+celery-worker:
+	cd api && uv run python worker.py
+
+# Alternative: Run Celery worker with standard command
+celery-worker-alt:
+	cd api && uv run celery -A app.tasks.celery_app worker --loglevel=info
+
+# Run API and Web concurrently (local) - worker runs separately
 up:
 	$(MAKE) -j 2 api web
+
+# Run all services including worker (local)
+up-all:
+	$(MAKE) -j 3 api web celery-worker
 
 # Docker commands
 docker-build:

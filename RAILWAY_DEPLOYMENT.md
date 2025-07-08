@@ -63,13 +63,20 @@ These are automatically set by Railway when you add the services:
 4. Railway will detect Node.js and use the `web/railway.toml` configuration  
 5. Name the service "web"
 
-#### 2.3 Deploy Celery Worker
+#### 2.3 Deploy Celery Worker (Decoupled)
 1. Click "New" → "GitHub Repo"
 2. Select the same repository  
 3. Set **Root Directory** to `api`
-4. Override the start command to: `uv run celery -A app.tasks.celery_app worker --loglevel=info`
-5. Add environment variable: `C_FORCE_ROOT=1`
-6. Name the service "celery-worker"
+4. **Option A - Python Script** (Recommended):
+   - Override start command: `uv run python worker.py`
+5. **Option B - Shell Script** (With more logging):
+   - Override start command: `./start_worker.sh`
+6. **Option C - Direct Celery** (Traditional):
+   - Override start command: `uv run celery -A app.tasks.celery_app worker --loglevel=info`
+7. Add environment variable: `C_FORCE_ROOT=1`
+8. Name the service "celery-worker"
+
+**Note**: The worker runs completely independently from the API service.
 
 ### 3. Add Database and Redis
 1. Click "New" in your project
@@ -115,16 +122,24 @@ Railway will automatically deploy when you push to your main branch. You can als
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
 │    Web      │    │     API     │    │   Celery    │
-│  (Next.js)  │───▶│  (FastAPI)  │───▶│   Worker    │
-│   Port 3000 │    │   Port 8000 │    │             │
+│  (Next.js)  │───▶│  (FastAPI)  │    │   Worker    │
+│   Port 3000 │    │   Port 8000 │    │ (Decoupled) │
 └─────────────┘    └─────────────┘    └─────────────┘
+                           │                   │
                            │                   │
                            ▼                   ▼
                    ┌─────────────┐    ┌─────────────┐
                    │ PostgreSQL  │    │    Redis    │
-                   │ (Database)  │    │  (Broker)   │
+                   │ (Database)  │    │ (Broker +   │
+                   │             │    │  Backend)   │
                    └─────────────┘    └─────────────┘
 ```
+
+**Decoupled Architecture Benefits:**
+- ✅ **API and Worker are independent** - API doesn't start/manage Celery
+- ✅ **Better reliability** - Worker crashes don't affect API
+- ✅ **Easier scaling** - Scale API and Worker separately  
+- ✅ **Cleaner logs** - Separate log streams for debugging
 
 ## Troubleshooting
 
@@ -166,6 +181,34 @@ Access logs for each service in the Railway dashboard:
 2. Click on a service
 3. Navigate to "Logs" tab
 
+## Local Development (Decoupled)
+
+For local development with decoupled services:
+
+### Option 1: Run Services Separately
+```bash
+# Terminal 1 - API
+make api
+
+# Terminal 2 - Web  
+make web
+
+# Terminal 3 - Celery Worker
+make celery-worker
+```
+
+### Option 2: Run All Together
+```bash
+# Run API, Web, and Worker concurrently
+make up-all
+```
+
+### Option 3: API + Web Only (no background tasks)
+```bash
+# Run just API and Web
+make up
+```
+
 ## Post-Deployment Setup
 
 1. **Run Database Migrations:**
@@ -179,7 +222,7 @@ Access logs for each service in the Railway dashboard:
 
 3. **Test Celery Tasks:**
    - Create a query through the web interface
-   - Check celery-worker logs for task processing
+   - Check celery-worker logs for task processing in Railway dashboard
 
 ## Scaling
 

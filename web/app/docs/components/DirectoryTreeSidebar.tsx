@@ -81,7 +81,6 @@ function TreeNodeComponent({
     if (node.type === 'directory') {
       onToggleExpand(node.path)
     } else {
-      console.log('DirectoryTreeSidebar: File selected:', node.path, 'Node:', node)
       onFileSelect(node.path)
     }
   }
@@ -191,7 +190,6 @@ export function DirectoryTreeSidebar({
     setIsLoading(true)
     try {
       const treeData = await getDirectoryTree()
-      console.log('DirectoryTreeSidebar: Received tree data:', treeData)
       setTree(treeData)
       
       // Auto-expand root directories
@@ -199,7 +197,6 @@ export function DirectoryTreeSidebar({
         const rootDirs = treeData
           .filter(node => node.type === 'directory')
           .map(node => node.path)
-        console.log('DirectoryTreeSidebar: Auto-expanding directories:', rootDirs)
         setExpandedNodes(new Set(rootDirs))
       }
       
@@ -227,7 +224,6 @@ export function DirectoryTreeSidebar({
   useEffect(() => {
     const handleFileUpdated = async (e: Event) => {
       const customEvent = e as CustomEvent<{filePath: string}>
-      console.log('File updated event received:', customEvent.detail.filePath)
       // First refresh the tree to show the updated files with forced refresh
       await loadTree(true)
       // Then explicitly check for modified files to update the re-index notification
@@ -278,7 +274,6 @@ export function DirectoryTreeSidebar({
         loadTree()
       },
       onFileUpdated: (filePath) => {
-        console.log('File updated, reloading directory tree:', filePath)
         loadTree()
       },
       // Add listener for indexing completion
@@ -349,7 +344,6 @@ export function DirectoryTreeSidebar({
   // Show commit prompt when there are modified files (whether or not they need reindexing)
   const shouldShowCommitPrompt = modifiedFilesInfo.hasModifiedFiles;
 
-  console.log('shouldShowReindexNotification', shouldShowReindexNotification)
   return (
     <>
       {/* Commit prompt */}

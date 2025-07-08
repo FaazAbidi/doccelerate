@@ -416,8 +416,6 @@ export async function applySuggestion(suggestionId: string): Promise<void> {
       })
     ])
 
-    // TODO: In the future, this could trigger actual file modification
-    console.log(`Applied suggestion ${suggestionId} to ${suggestion.file.path}`)
   } catch (error) {
     console.error('Failed to apply suggestion:', error)
     throw new Error('Failed to apply suggestion')

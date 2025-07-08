@@ -40,8 +40,9 @@ celery_app.conf.update(
     task_compression='gzip',
 )
 
-# Automatically discover tasks in the app.tasks package
-celery_app.autodiscover_tasks(["app.tasks"])
+# Automatically discover tasks modules (app.tasks.*)
+# Provide the root package so Celery will look for "app.tasks" inside it.
+celery_app.autodiscover_tasks(["app"])
 
 # ---------------------------------------------------------------------------
 # Monkey-patch Celery's own LoggingProxy so that it behaves more like a real
