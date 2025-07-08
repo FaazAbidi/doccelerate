@@ -7,3 +7,4 @@ restartPolicyType = "ON_FAILURE"
 [variables]
 PYTHONDONTWRITEBYTECODE = "1"
 PYTHONUNBUFFERED = "1"
+C_FORCE_ROOT = "1"
