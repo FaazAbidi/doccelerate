@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { Github, ExternalLink, Unlink, Settings } from 'lucide-react'
 import { Card } from '@/app/components/Card'
 import { Button } from '@/app/components/Button'
@@ -89,11 +88,9 @@ export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-3">
                 {githubAvatarUrl && (
-                  <Image
+                  <img
                     src={githubAvatarUrl}
                     alt={githubUsername || 'GitHub Avatar'}
-                    width={32}
-                    height={32}
                     className="w-8 h-8 rounded-full border border-neutral/20"
                   />
                 )}
