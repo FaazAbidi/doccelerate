@@ -11,6 +11,13 @@ const nextConfig: NextConfig = {
   experimental: {
     // Add any experimental features here
   },
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      components: require('path').join(__dirname, 'app/components'),
+    };
+    return config;
+  },
 };
 
 export default nextConfig;
