@@ -79,7 +79,7 @@ export async function getGithubRepositories(): Promise<GetGithubRepositoriesResu
       isPrivate: repo.private,
       isIncluded: includedRepoNames.has(repo.full_name),
       language: repo.language,
-      updatedAt: repo.updated_at,
+      updatedAt: repo.updated_at || new Date().toISOString(),
       githubUrl: repo.html_url,
     }))
 

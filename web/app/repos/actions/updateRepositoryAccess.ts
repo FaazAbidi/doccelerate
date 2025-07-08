@@ -61,7 +61,7 @@ export async function updateRepositoryAccess(
       const repoIdsToRemove = reposToRemove.map(repo => repo.id)
       
       // Get chunk hashes that need to be deleted
-      const chunksToDelete = await prisma.fileChunk.findMany({
+      const chunksToDelete = await prisma.file_chunk.findMany({
         where: {
           file: {
             repo_id: { in: repoIdsToRemove }
@@ -75,7 +75,7 @@ export async function updateRepositoryAccess(
       // Delete in the correct order due to foreign key constraints
       await prisma.$transaction([
         // Delete file chunks first
-        prisma.fileChunk.deleteMany({
+        prisma.file_chunk.deleteMany({
           where: {
             file: {
               repo_id: { in: repoIdsToRemove }
@@ -121,7 +121,7 @@ export async function updateRepositoryAccess(
         // Add repository to database
         await prisma.repo.create({
           data: {
-            github_id: repoData.id.toString(),
+            github_id: repoData.id,
             name: repoData.name,
             github_full_name: repoData.full_name,
             description: repoData.description,
@@ -129,8 +129,6 @@ export async function updateRepositoryAccess(
             default_branch: repoData.default_branch,
             github_url: repoData.html_url,
             owner_id: userId,
-            clone_url: repoData.clone_url,
-            ssh_url: repoData.ssh_url,
           },
         })
 
