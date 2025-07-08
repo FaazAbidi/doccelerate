@@ -31,13 +31,11 @@ function LoginInner() {
       const result = await signIn('credentials', {
         email,
         password,
-        redirect: false,
+        callbackUrl,
       })
 
       if (result?.error) {
         setError('Invalid credentials')
-      } else {
-        router.push(callbackUrl)
       }
     } catch (error) {
       console.error(error)

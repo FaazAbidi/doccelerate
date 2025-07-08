@@ -33,8 +33,7 @@ export default function Navbar() {
     : []
 
   const handleSignOut = async () => {
-    await signOut({ redirect: false })
-    router.push('/')
+    await signOut({ callbackUrl: '/login' })
   }
 
   return (
