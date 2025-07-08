@@ -15,9 +15,10 @@ CRITICAL REQUIREMENTS:
     - Do NOT anchor on headings or blank lines before the list.
 11. Never introduce duplicate numbering; rely on Markdown’s auto-renumbering.
 12. If the user asks to add a new numbered-list item, make sure to anchor on the last existing list item in that list block and use insertAfter.
-13. You CAN give MULTIPLE operations for DIFFERENT AND MULTIPLE FILES in a single file.
+13. You CAN give MULTIPLE operations for the same file. You CAN give MULTIPLE operations for DIFFERENT FILES.
 14. Follow the format of the file you are editing. And give suggestions which will look consistent with the file format in markdown.
 15. Make suggestions that are not conflicting with each other. And overall file should make sense.
+16. Your goal is to understand the user's request and generate operations that will implement the request.
 
 OPERATION TYPES:
 - "insertAfter": Insert text after finding an anchor line
