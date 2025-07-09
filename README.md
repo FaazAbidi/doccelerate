@@ -154,12 +154,40 @@ Since this was a time-boxed prototype I consciously took a few shortcuts.  I’v
 
 ---
 
+## 🧠 Two-Pass AI Documentation Generation
+
+I've implemented a more intelligent approach to documentation updates using a two-pass system:
+
+### How it works:
+1. **Pass 1: File Selection**
+   - AI analyzes the user's request and available documentation
+   - Identifies which specific files need modification
+   - Considers cross-file dependencies and documentation context
+   - Filters out non-documentation files automatically
+
+2. **Pass 2: Detailed Editing**
+   - For each selected file, generates precise edit operations
+   - Works with complete file content rather than isolated chunks
+   - Creates edits that maintain consistent style and structure
+   - Uses precise anchor text for accurate replacements
+
+### Benefits:
+- **Higher Quality Edits**: By working with complete file context rather than isolated chunks
+- **More Targeted Changes**: Only modifies files directly relevant to the request
+- **Cohesive Updates**: Maintains documentation consistency across related files
+- **Reduced Noise**: Avoids suggesting changes to irrelevant files
+
+This two-pass architecture significantly improves the accuracy and usefulness of AI-generated documentation updates, leading to less manual editing required by users.
+
+---
+
 ## 🛤️ Things I’d love to explore next
 1. Fine-tuned diffusion model for Markdown diff generation.  
 2. Optimistic UI with CRDT for collaborative editing.
 3. Add more markdown formatting options to the editor and add more features in our preview.
 4. Multilingual docs (i18n) – pipe through DeepL API.  
 5. Optimize the indexing process to be more efficient and faster.
+6. Further refine the two-pass approach with additional context and user feedback.
 
 ---
 
