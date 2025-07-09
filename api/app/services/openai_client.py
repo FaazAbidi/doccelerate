@@ -394,6 +394,7 @@ class OpenAIService:
                 JOIN public.file_chunk fc ON c.hash = fc.chunk_hash
                 JOIN public.file f ON fc.file_id = f.id
                 WHERE f.repo_id = $2::uuid
+                AND c.embedding IS NOT NULL  -- Add this line
                 AND 1 - (c.embedding <=> $1::vector) >= $3
                 ORDER BY c.embedding <=> $1::vector
                 LIMIT $4;
@@ -407,7 +408,7 @@ class OpenAIService:
                     similarity_threshold,  # $3
                     limit           # $4
                 )
-                
+
                 # Convert results to list of dictionaries
                 similar_chunks = []
                 for row in results:
@@ -421,7 +422,7 @@ class OpenAIService:
                         'chunk_order': row.get('chunk_order'),
                         'start_line': row.get('start_line'),
                         'end_line': row.get('end_line'),
-                        'similarity': float(row.get('similarity', 0.0))
+                        'similarity': float(row.get('similarity') or 0.0)  # Handle None case
                     })
                 
                 return similar_chunks
@@ -525,7 +526,7 @@ class OpenAIService:
                         'chunk_order': row.get('chunk_order'),
                         'start_line': row.get('start_line'),
                         'end_line': row.get('end_line'),
-                        'similarity': float(row.get('similarity', 0.0))
+                        'similarity': float(row.get('similarity') or 0.0)
                     })
                 return chunks
         except Exception as e:

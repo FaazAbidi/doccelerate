@@ -8,6 +8,8 @@ from .celery_app import celery_app
 from app.database import prisma
 from app.services.openai_client import openai_service
 from app.services.operations_parser import parse_llm_response_to_suggestions, OperationParseError, parse_operations_json
+from app.services.two_pass_generator import TwoPassDocumentationGenerator
+from app.settings import settings
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -63,14 +65,11 @@ def process_query(self, query: str, user_id: str, repo_id: str) -> Dict[str, Any
     """
     Process a natural language documentation change request.
     
-    This task:
-    1. Embeds the query text
-    2. Searches for relevant chunks using pgvector
-    3. Checks if repo needs re-indexing based on Merkle tree
-
-    4. Prompts LLM with context to generate operations JSON
-    5. Parses operations and creates suggestion records
-    6. Sends real-time notifications
+    This task can use either:
+    - Two-pass approach: First identify files, then generate operations for each file
+    - Single-pass approach: Traditional approach with chunk search and single LLM call
+    
+    The approach is controlled by the use_two_pass_approach setting.
     
     Args:
         query: Natural language change request
@@ -81,7 +80,14 @@ def process_query(self, query: str, user_id: str, repo_id: str) -> Dict[str, Any
         Dict with processing results
     """
     try:
-        result = asyncio.run(_run_query_internal(self, query, user_id, repo_id))
+        # Choose processing approach based on configuration
+        if settings.use_two_pass_approach:
+            logger.info("Using two-pass approach for query processing")
+            result = asyncio.run(_run_query_two_pass(self, query, user_id, repo_id))
+        else:
+            logger.info("Using single-pass approach for query processing")
+            result = asyncio.run(_run_query_internal(self, query, user_id, repo_id))
+        
         return result
     except Exception as e:
         logger.error(f"Query processing error: {e}")
@@ -93,6 +99,134 @@ def process_query(self, query: str, user_id: str, repo_id: str) -> Dict[str, Any
             "query": query[:100] + "..." if len(query) > 100 else query,
             "repo_id": repo_id
         }
+
+async def _run_query_two_pass(
+    current_task,
+    query: str,
+    user_id: str,
+    repo_id: str
+) -> Dict[str, Any]:
+    """Two-pass query processing approach"""
+    try:
+        # Connect to database
+        await prisma.connect()
+        
+        # Step 1: Starting
+        current_task.update_state(state='PROGRESS', meta={'step': 'starting', 'progress': 0})
+        await _update_job_progress(current_task.request.id, user_id, 'running', 0, 'starting')
+        
+        # Step 2: Initialize two-pass generator
+        current_task.update_state(state='PROGRESS', meta={'step': 'initializing_two_pass', 'progress': 10})
+        await _update_job_progress(current_task.request.id, user_id, 'running', 10, 'initializing_two_pass')
+        
+        two_pass_generator = TwoPassDocumentationGenerator(repo_id)
+        
+        # Step 3: Two-pass generation
+        current_task.update_state(state='PROGRESS', meta={'step': 'two_pass_generation', 'progress': 20})
+        await _update_job_progress(current_task.request.id, user_id, 'running', 20, 'two_pass_generation')
+        
+        generation_result = await two_pass_generator.generate_suggestions(query, user_id)
+        
+        if generation_result['status'] == 'failed':
+            raise Exception(generation_result.get('error', 'Two-pass generation failed'))
+        
+        if generation_result['suggestions_created'] == 0:
+            # Complete the job with no suggestions
+            current_task.update_state(state='SUCCESS', meta={'step': 'completed', 'progress': 100})
+            await _update_job_progress(current_task.request.id, user_id, 'completed', 100, 'completed')
+            
+            message = generation_result.get('message', 'No suggestions generated')
+            await _update_job_completion(
+                task_id=current_task.request.id,
+                user_id=user_id,
+                suggestions_created=0,
+                message=message
+            )
+            return {
+                "status": "completed",
+                "message": message,
+                "suggestions_created": 0,
+                "files_to_edit": generation_result.get('files_to_edit', []),
+                "query": query,
+                "repo_id": repo_id
+            }
+        
+        # Step 4: Create suggestions from operations
+        current_task.update_state(state='PROGRESS', meta={'step': 'creating_suggestions', 'progress': 60})
+        await _update_job_progress(current_task.request.id, user_id, 'running', 60, 'creating_suggestions')
+        
+        suggestions = []
+        operations = generation_result.get('operations', [])
+        
+        if operations:
+            try:
+                suggestions = await parse_llm_response_to_suggestions(
+                    operations_json=operations,
+                    repo_id=repo_id,
+                    user_id=user_id,
+                    confidence=0.8,
+                    model_used="gpt-4o"  # Note: two-pass uses gpt-4o for better results
+                )
+            except OperationParseError as e:
+                logger.warning(f"Operations parsing failed in two-pass approach: {e}")
+                suggestions = []
+        
+        # Step 5: Send notifications
+        current_task.update_state(state='PROGRESS', meta={'step': 'sending_notifications', 'progress': 80})
+        await _update_job_progress(current_task.request.id, user_id, 'running', 80, 'sending_notifications')
+        
+        if suggestions:
+            await _send_new_suggestions_notification(repo_id, len(suggestions))
+        
+        # Update job metadata with completion info
+        completion_message = f"Two-pass query processed successfully. {len(suggestions)} suggestions created." if suggestions else "Two-pass query processed successfully. No suggestions were generated."
+        await _update_job_completion(
+            task_id=current_task.request.id,
+            user_id=user_id,
+            suggestions_created=len(suggestions),
+            message=completion_message
+        )
+        
+        # Step 6: Complete
+        current_task.update_state(state='SUCCESS', meta={'step': 'completed', 'progress': 100})
+        await _update_job_progress(current_task.request.id, user_id, 'completed', 100, 'completed')
+        
+        return {
+            "status": "completed",
+            "suggestions_created": len(suggestions),
+            "files_modified": len(generation_result.get('files_to_edit', [])),
+            "files_to_edit": generation_result.get('files_to_edit', []),
+            "approach": "two_pass",
+            "query": query,
+            "repo_id": repo_id,
+            "suggestion_ids": [s['id'] for s in suggestions] if suggestions else []
+        }
+        
+    except Exception as e:
+        # Update job with failure status
+        await _update_job_progress(current_task.request.id, user_id, 'failed', None, 'failed', str(e))
+
+        # Update job metadata with failure info
+        failure_message = f"Two-pass query failed: {str(e)}"
+        await _update_job_completion(
+            task_id=current_task.request.id,
+            user_id=user_id,
+            suggestions_created=0,
+            message=failure_message
+        )
+        
+        return {
+            "status": "failed",
+            "error": str(e),
+            "approach": "two_pass",
+            "query": query[:100] + "..." if len(query) > 100 else query,
+            "repo_id": repo_id
+        }
+        
+    finally:
+        # Cleanup database connection
+        if prisma.is_connected():
+            await prisma.disconnect()
 
 async def _run_query_internal(
     current_task,
@@ -124,10 +258,10 @@ async def _run_query_internal(
         relevant_chunks = await openai_service.search_similar_chunks(
             query_embedding=query_embedding,
             repo_id=repo_id,
-            limit=30,  # Get more chunks for better context
+            limit=15,  # Get more chunks for better context
             similarity_threshold=0.4  # Lower threshold for broader search
         )
-        
+
         # Fallback: try lexical full-text search if vector search returned nothing
         if not relevant_chunks:
             current_task.update_state(state='PROGRESS', meta={'step': 'searching_fulltext', 'progress': 30})
@@ -154,6 +288,7 @@ async def _run_query_internal(
                 "status": "completed",
                 "message": "No relevant documentation found for query",
                 "suggestions_created": 0,
+                "approach": "single_pass",
                 "query": query,
                 "repo_id": repo_id
             }
@@ -235,6 +370,7 @@ async def _run_query_internal(
             "suggestions_created": len(suggestions),
             "files_modified": len(set(s['file_path'] for s in suggestions)) if suggestions else 0,
             "chunks_analyzed": len(relevant_chunks),
+            "approach": "single_pass",
             "query": query,
             "repo_id": repo_id,
             "suggestion_ids": [s['id'] for s in suggestions] if suggestions else []
@@ -256,6 +392,7 @@ async def _run_query_internal(
         return {
             "status": "failed",
             "error": str(e),
+            "approach": "single_pass",
             "query": query[:100] + "..." if len(query) > 100 else query,
             "repo_id": repo_id
         }
