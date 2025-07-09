@@ -149,7 +149,8 @@ class TwoPassDocumentationGenerator:
                     {"role": "user", "content": selection_prompt}
                 ],
                 model="gpt-4o-mini",
-                temperature=0.1
+                temperature=0.1,
+                max_tokens=1000
             )
             
             if not selection_response:
@@ -340,21 +341,31 @@ Return JSON array of file paths:
         """Generate operations for a single file"""
         
         try:
+            # Detect file format/type
+            file_ext = file_path.split('.')[-1] if '.' in file_path else ''
+            
             # Create focused prompt for this file
             file_prompt = f"""
 TASK: Generate operations to implement the following change request for this specific file.
 
 USER QUERY: "{query}"
-FILE: {file_path}
 
+FILE PATH: {file_path}
+FILE TYPE: {file_ext}
 FULL FILE CONTENT:
 {file_content}
 
 INSTRUCTIONS:
 1. Focus ONLY on changes needed for THIS file
-2. Use precise anchor text that exists in the file content above
-3. Make minimal, targeted changes that directly address the query
-4. Suggest edits that are CONSISTENT with the overall documentation style, formatting, and structure.
+2. Use EXACTLY MATCHING anchor text that exists in the file content above
+4. PRESERVE the existing document format, style, and structure:
+   - Match the surrounding text's formatting exactly (indentation, bullets, code blocks)
+   - For lists, maintain consistent numbering and bullet style
+   - For code blocks, maintain the same language and syntax highlighting
+   - For headings, maintain the same level and formatting
+   - For technical terms, maintain the same capitalization and code formatting
+5. When adding new content, analyze and MATCH the style of similar elements
+6. Follow the file's established pattern for spacing, line breaks, and paragraph structure
 
 Generate operations JSON for this file:
 """
@@ -367,9 +378,9 @@ Generate operations JSON for this file:
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": file_prompt}
                 ],
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 temperature=0.1,
-                max_tokens=3000
+                max_tokens=5000
             )
             
             if not operations_response:

@@ -320,6 +320,8 @@ class OpenAIService:
         messages: List[Dict[str, str]], 
         max_retries: int = 3, 
         model: Optional[str] = None,
+        temperature: float = 0.1,
+        max_tokens: int = 5000,
         **kwargs
     ) -> Optional[str]:
         """
@@ -339,6 +341,8 @@ class OpenAIService:
                 response = await self._client.chat.completions.create(
                     model=model or self._chat_model,
                     messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
                     **kwargs
                 )
                 return response.choices[0].message.content
