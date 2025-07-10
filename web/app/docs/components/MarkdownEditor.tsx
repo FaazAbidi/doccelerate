@@ -56,6 +56,49 @@ export function MarkdownEditor({
           height: '100%',
           overflow: 'auto',
         },
+        /* Search panel styling */
+        '.cm-panel.cm-search': {
+          padding: '8px',
+          backgroundColor: 'hsl(var(--background))',
+          borderBottom: '1px solid hsl(var(--muted))',
+          color: 'hsl(var(--foreground))',
+          fontFamily: 'inherit',
+        },
+        '.cm-panel.cm-search input': {
+          backgroundColor: 'hsl(var(--input))',
+          color: 'hsl(var(--foreground))',
+          border: '1px solid hsl(var(--muted))',
+          borderRadius: '6px',
+          padding: '4px 6px',
+          fontSize: '12px',
+          fontFamily: 'inherit',
+          '&:focus': {
+            outline: 'none',
+          },
+        },
+        '.cm-panel.cm-search .cm-button': {
+          backgroundColor: 'hsl(var(--primary))',
+          color: 'hsl(var(--primary-foreground))',
+          border: 'none',
+          borderRadius: '6px',
+          padding: '4px 8px',
+          fontSize: '12px',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        },
+        '.cm-panel.cm-search .cm-button:hover': {
+          filter: 'brightness(0.9)',
+          fontFamily: 'inherit',
+        },
+        '.cm-searchMatch': {
+          backgroundColor: 'hsl(var(--yellow) / 0.4)',
+          outline: '2px solid hsl(var(--yellow))',
+          fontFamily: 'inherit',
+        },
+        '.cm-selectionMatch': {
+          backgroundColor: 'hsl(var(--accent) / 0.4)',
+          fontFamily: 'inherit',
+        },
       }),
       EditorView.updateListener.of((update) => {
         if (update.changes.empty === false) {

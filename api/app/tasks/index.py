@@ -293,19 +293,42 @@ async def _process_files(repo_path: str, docs_directory: str, repo_id: str) -> L
     
     if not os.path.exists(docs_path):
         return files_data
+
+    # Define allowed documentation file extensions
+    DOCUMENTATION_EXTENSIONS = {
+        '.md', '.mdx'
+    }
     
     for root, dirs, files in os.walk(docs_path):
         for file in files:
             file_path = os.path.join(root, file)
             relative_path = os.path.relpath(file_path, docs_path)
             
-            # Skip binary files and hidden files
-            if file.startswith('.') or _is_binary_file(file_path):
+            # Skip hidden files
+            if file.startswith('.'):
+                continue
+                
+            # Get file extension
+            _, file_ext = os.path.splitext(file.lower())
+            
+            # Skip files that are not documentation files
+            if file_ext not in DOCUMENTATION_EXTENSIONS:
+                logger.info(f"Skipping non-documentation file: {relative_path} (extension: {file_ext})")
+                continue
+            
+            # Skip binary files (additional safety check)
+            if _is_binary_file(file_path):
+                logger.info(f"Skipping binary file: {relative_path}")
                 continue
             
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
+                
+                # Skip empty files
+                if not content.strip():
+                    logger.info(f"Skipping empty file: {relative_path}")
+                    continue
                 
                 # Calculate content hash
                 content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
@@ -329,10 +352,14 @@ async def _process_files(repo_path: str, docs_directory: str, repo_id: str) -> L
                     'storage_key': storage_key
                 })
                 
-            except (UnicodeDecodeError, OSError):
+                logger.info(f"Processed documentation file: {relative_path} ({len(content)} chars)")
+                
+            except (UnicodeDecodeError, OSError) as e:
                 # Skip files that can't be read as text
+                logger.warning(f"Skipping unreadable file {relative_path}: {e}")
                 continue
     
+    logger.info(f"Processed {len(files_data)} documentation files")
     return files_data
 
 

@@ -88,16 +88,26 @@ function applyInsertAfter(lines: string[], operation: Operation): string {
     throw new Error('insertAfter requires find and insert properties')
   }
   
-  // Find the line containing the anchor text
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(find)) {
-      // Insert after this line
-      lines.splice(i + 1, 0, insert)
-      return lines.join('\n')
-    }
+  // Rejoin lines to search for multi-line patterns
+  const fullContent = lines.join('\n')
+  
+  // Check if find text exists in the content
+  if (!fullContent.includes(find)) {
+    throw new Error(`Could not find anchor text: ${find}`)
   }
   
-  throw new Error(`Could not find anchor text: ${find}`)
+  // Find the position of the match
+  const matchStart = fullContent.indexOf(find)
+  const matchEnd = matchStart + find.length
+  
+  // Find which line the match ends on
+  const contentBeforeMatchEnd = fullContent.substring(0, matchEnd)
+  const linesBeforeMatchEnd = contentBeforeMatchEnd.split('\n')
+  const targetLineIdx = linesBeforeMatchEnd.length - 1
+  
+  // Insert after the target line
+  lines.splice(targetLineIdx + 1, 0, insert)
+  return lines.join('\n')
 }
 
 /**
@@ -110,16 +120,25 @@ function applyInsertBefore(lines: string[], operation: Operation): string {
     throw new Error('insertBefore requires find and insert properties')
   }
   
-  // Find the line containing the anchor text
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(find)) {
-      // Insert before this line
-      lines.splice(i, 0, insert)
-      return lines.join('\n')
-    }
+  // Rejoin lines to search for multi-line patterns
+  const fullContent = lines.join('\n')
+  
+  // Check if find text exists in the content
+  if (!fullContent.includes(find)) {
+    throw new Error(`Could not find anchor text: ${find}`)
   }
   
-  throw new Error(`Could not find anchor text: ${find}`)
+  // Find the position of the match
+  const matchStart = fullContent.indexOf(find)
+  
+  // Find which line the match starts on
+  const contentBeforeMatchStart = fullContent.substring(0, matchStart)
+  const linesBeforeMatchStart = contentBeforeMatchStart.split('\n')
+  const targetLineIdx = linesBeforeMatchStart.length - 1
+  
+  // Insert before the target line
+  lines.splice(targetLineIdx, 0, insert)
+  return lines.join('\n')
 }
 
 /**
@@ -132,15 +151,17 @@ function applyReplace(lines: string[], operation: Operation): string {
     throw new Error('replace requires find and replace properties')
   }
   
-  // Find and replace the text
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(find)) {
-      lines[i] = lines[i].replace(find, replace)
-      return lines.join('\n')
-    }
+  // Rejoin lines to search for multi-line patterns
+  const fullContent = lines.join('\n')
+  
+  // Check if find text exists in the content
+  if (!fullContent.includes(find)) {
+    throw new Error(`Could not find text to replace: ${find}`)
   }
   
-  throw new Error(`Could not find text to replace: ${find}`)
+  // Replace the text
+  const modifiedContent = fullContent.replace(find, replace)
+  return modifiedContent
 }
 
 /**
@@ -153,30 +174,26 @@ function applyDeleteBlock(lines: string[], operation: Operation): string {
     throw new Error('deleteBlock requires find and until properties')
   }
   
-  // Find the start and end lines
-  let startIdx = -1
-  let endIdx = -1
+  // Rejoin lines to search for multi-line patterns
+  const fullContent = lines.join('\n')
   
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(find) && startIdx === -1) {
-      startIdx = i
-    } else if (lines[i].includes(until) && startIdx !== -1) {
-      endIdx = i
-      break
-    }
-  }
-  
-  if (startIdx === -1) {
+  // Find the start and end positions
+  const startPos = fullContent.indexOf(find)
+  if (startPos === -1) {
     throw new Error(`Could not find start anchor text: ${find}`)
   }
   
-  if (endIdx === -1) {
+  const endPos = fullContent.indexOf(until, startPos)
+  if (endPos === -1) {
     throw new Error(`Could not find end anchor text: ${until}`)
   }
   
-  // Delete the block (inclusive of both start and end lines)
-  lines.splice(startIdx, endIdx - startIdx + 1)
-  return lines.join('\n')
+  // Include the until text in the deletion
+  const endPosInclusive = endPos + until.length
+  
+  // Delete the block
+  const modifiedContent = fullContent.substring(0, startPos) + fullContent.substring(endPosInclusive)
+  return modifiedContent
 }
 
 /**

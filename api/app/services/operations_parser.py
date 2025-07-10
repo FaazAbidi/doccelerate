@@ -125,14 +125,25 @@ def _apply_insert_after(lines: List[str], operation: Operation) -> str:
     find_text = operation.find
     insert_text = operation.insert
     
-    # Find the line containing the anchor text
-    for i, line in enumerate(lines):
-        if find_text in line:
-            # Insert after this line
-            lines.insert(i + 1, insert_text)
-            return '\n'.join(lines)
+    # Rejoin lines to search for multi-line patterns
+    full_content = '\n'.join(lines)
     
-    raise OperationApplyError(f"Could not find anchor text: {find_text}")
+    # Check if find_text exists in the content
+    if find_text not in full_content:
+        raise OperationApplyError(f"Could not find anchor text: {find_text}")
+    
+    # Find the position of the match
+    match_start = full_content.find(find_text)
+    match_end = match_start + len(find_text)
+    
+    # Find which line the match ends on
+    content_before_match_end = full_content[:match_end]
+    lines_before_match_end = content_before_match_end.split('\n')
+    target_line_idx = len(lines_before_match_end) - 1
+    
+    # Insert after the target line
+    lines.insert(target_line_idx + 1, insert_text)
+    return '\n'.join(lines)
 
 
 def _apply_insert_before(lines: List[str], operation: Operation) -> str:
@@ -140,14 +151,24 @@ def _apply_insert_before(lines: List[str], operation: Operation) -> str:
     find_text = operation.find
     insert_text = operation.insert
     
-    # Find the line containing the anchor text
-    for i, line in enumerate(lines):
-        if find_text in line:
-            # Insert before this line
-            lines.insert(i, insert_text)
-            return '\n'.join(lines)
+    # Rejoin lines to search for multi-line patterns
+    full_content = '\n'.join(lines)
     
-    raise OperationApplyError(f"Could not find anchor text: {find_text}")
+    # Check if find_text exists in the content
+    if find_text not in full_content:
+        raise OperationApplyError(f"Could not find anchor text: {find_text}")
+    
+    # Find the position of the match
+    match_start = full_content.find(find_text)
+    
+    # Find which line the match starts on
+    content_before_match_start = full_content[:match_start]
+    lines_before_match_start = content_before_match_start.split('\n')
+    target_line_idx = len(lines_before_match_start) - 1
+    
+    # Insert before the target line
+    lines.insert(target_line_idx, insert_text)
+    return '\n'.join(lines)
 
 
 def _apply_replace(lines: List[str], operation: Operation) -> str:
@@ -155,13 +176,16 @@ def _apply_replace(lines: List[str], operation: Operation) -> str:
     find_text = operation.find
     replace_text = operation.replace
     
-    # Find and replace the text
-    for i, line in enumerate(lines):
-        if find_text in line:
-            lines[i] = line.replace(find_text, replace_text)
-            return '\n'.join(lines)
+    # Rejoin lines to search for multi-line patterns
+    full_content = '\n'.join(lines)
     
-    raise OperationApplyError(f"Could not find text to replace: {find_text}")
+    # Check if find_text exists in the content
+    if find_text not in full_content:
+        raise OperationApplyError(f"Could not find text to replace: {find_text}")
+    
+    # Replace the text
+    modified_content = full_content.replace(find_text, replace_text)
+    return modified_content
 
 
 def _apply_delete_block(lines: List[str], operation: Operation) -> str:
@@ -169,26 +193,24 @@ def _apply_delete_block(lines: List[str], operation: Operation) -> str:
     find_text = operation.find
     until_text = operation.until
     
-    # Find the start and end lines
-    start_idx = None
-    end_idx = None
+    # Rejoin lines to search for multi-line patterns
+    full_content = '\n'.join(lines)
     
-    for i, line in enumerate(lines):
-        if find_text in line and start_idx is None:
-            start_idx = i
-        elif until_text in line and start_idx is not None:
-            end_idx = i
-            break
-    
-    if start_idx is None:
+    # Find the start and end positions
+    start_pos = full_content.find(find_text)
+    if start_pos == -1:
         raise OperationApplyError(f"Could not find start anchor text: {find_text}")
     
-    if end_idx is None:
+    end_pos = full_content.find(until_text, start_pos)
+    if end_pos == -1:
         raise OperationApplyError(f"Could not find end anchor text: {until_text}")
     
-    # Delete the block (inclusive of both start and end lines)
-    del lines[start_idx:end_idx + 1]
-    return '\n'.join(lines)
+    # Include the until_text in the deletion
+    end_pos += len(until_text)
+    
+    # Delete the block
+    modified_content = full_content[:start_pos] + full_content[end_pos:]
+    return modified_content
 
 
 def apply_operations_to_content(content: str, operations: List[Operation]) -> str:
@@ -225,6 +247,7 @@ def validate_operations_apply_to_content(content: str, operations_json: List[Dic
         True if all operations can be applied, False otherwise
     """
     try:
+        logger.info(f"Validating operations: {operations_json}")
         operations = validate_operations(operations_json)
         apply_operations_to_content(content, operations)
         return True
