@@ -23,9 +23,6 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     allowed_origins: list[str] = ["*"]
     
-    # Query processing configuration
-    use_two_pass_approach: bool = True  # Enable two-pass documentation generation
-
     REDIS_URL: str
     
     DATABASE_URL: str

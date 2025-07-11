@@ -1,41 +1,21 @@
-.PHONY: api web up docker-up docker-down docker-build docker-logs db-pull db-generate db-sync
+.PHONY: up stop build logs dev api-local web-local up-local up-all-local celery-worker celery-worker-alt db-pull db-generate db-sync
 
-api:
-	cd api && uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
-web:
-	cd web && npm run dev
-
-# Run Celery worker separately
-celery-worker:
-	cd api && uv run python worker.py
-
-# Alternative: Run Celery worker with standard command
-celery-worker-alt:
-	cd api && uv run celery -A app.tasks.celery_app worker --loglevel=info
-
-# Run API and Web concurrently (local) - worker runs separately
+# Main Docker commands
 up:
-	$(MAKE) -j 2 api web
-
-# Run all services including worker (local)
-up-all:
-	$(MAKE) -j 3 api web celery-worker
-
-# Docker commands
-docker-build:
-	docker-compose build
-
-docker-up:
 	docker-compose up -d
 
-docker-down:
+stop:
 	docker-compose down
 
-docker-logs:
+build:
+	docker-compose down --volumes --remove-orphans
+	docker-compose build --no-cache
+	docker-compose up -d
+
+logs:
 	docker-compose logs -f
 
-docker-dev:
+dev:
 	docker-compose up --build
 
 # Sync database schema from Supabase for API
@@ -66,31 +46,3 @@ db-generate:
 db-sync:
 	$(MAKE) db-pull
 	$(MAKE) db-generate
-
-# Railway deployment commands
-railway-login:
-	railway login
-
-# Note: Railway services must be created manually via dashboard for monorepo
-# Each service points to different root directories (api/, web/, api/ for worker)
-
-railway-logs-api:
-	railway logs --service api
-
-railway-logs-web:
-	railway logs --service web
-
-railway-logs-worker:
-	railway logs --service celery-worker
-
-railway-status:
-	railway status
-
-railway-deploy-api:
-	cd api && railway up
-
-railway-deploy-web:
-	cd web && railway up
-
-railway-deploy-all:
-	$(MAKE) -j 2 railway-deploy-api railway-deploy-web

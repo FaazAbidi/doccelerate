@@ -24,7 +24,7 @@ class OpenAIService:
         self._embedding_model = "text-embedding-3-small"
         self._embedding_dimensions = 1536
         self._encoding = tiktoken.get_encoding("cl100k_base")
-        self._chat_model = "gpt-4"
+        self._chat_model = "gpt-5-mini"
     
     @property
     def client(self) -> AsyncOpenAI:
@@ -266,7 +266,7 @@ class OpenAIService:
             user_query: The user's natural language change request
             relevant_chunks: List of relevant chunks with content and file context
             file_paths: List of file paths being modified
-            model: OpenAI model to use (defaults to gpt-4)
+            model: OpenAI model to use (defaults to gpt-5-mini)
             
         Returns:
             Raw LLM response with operations JSON or None if failed
@@ -330,7 +330,7 @@ class OpenAIService:
         Args:
             messages: List of message objects for the conversation
             max_retries: Maximum number of retry attempts
-            model: OpenAI model to use (defaults to gpt-4)
+            model: OpenAI model to use (defaults to gpt-5-mini)
             **kwargs: Additional parameters for the chat completion
             
         Returns:

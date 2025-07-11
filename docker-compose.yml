@@ -1,4 +1,14 @@
 services:
+  # Redis Service
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
   # FastAPI Backend Service
   api:
     build:
@@ -8,24 +18,15 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - DIRECT_URL=${DATABASE_URL}
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - REDIS_URL=${REDIS_URL}
+      - REDIS_URL=redis://redis:6379
       - C_FORCE_ROOT=1
     env_file:
       - .env
     volumes:
       - ./api:/app
       - /app/node_modules
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    depends_on:
+      - redis
 
   # Celery Worker Service
   celery-worker:
@@ -34,12 +35,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - DIRECT_URL=${DATABASE_URL}
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - REDIS_URL=${REDIS_URL}
+      - REDIS_URL=redis://redis:6379
       - C_FORCE_ROOT=1
     env_file:
       - .env
@@ -49,6 +45,7 @@ services:
     command: ["sh", "-c", "uv run prisma generate && uv run celery -A app.tasks.celery_app worker --loglevel=info"]
     depends_on:
       - api
+      - redis
 
   # Next.js Frontend Service
   web:
@@ -70,12 +67,9 @@ services:
       - /app/.next
     depends_on:
       - api
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+
+volumes:
+  redis_data:
 
 networks:
   default:

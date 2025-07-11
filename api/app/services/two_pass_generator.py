@@ -1,11 +1,15 @@
 """
 Two-pass documentation generation service
+
+This service implements a two-pass approach for generating documentation suggestions:
+- Pass 1: Identify which files need to be modified based on the user query
+- Pass 2: Generate specific operations for each selected file
 """
 
 import json
-import re
+import asyncio
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from app.services.openai_client import openai_service
 from app.services.operations_parser import parse_operations_json
@@ -45,67 +49,60 @@ Example outputs:
 Your response must be a JSON array of strings (file paths).
 """
 
-class TwoPassDocumentationGenerator:
-    """
-    Service for generating documentation suggestions using a two-pass approach:
-    Pass 1: Identify which files need to be modified
-    Pass 2: Generate specific operations for each file
-    """
+
+class FileContentManager:
+    """Handles file content retrieval and caching"""
     
     def __init__(self, repo_id: str):
         self.repo_id = repo_id
-        self.openai_service = openai_service
+        self._content_cache: Dict[str, str] = {}
     
-    async def generate_suggestions(self, query: str, user_id: str) -> Dict[str, Any]:
-        """
-        Generate documentation suggestions using two-pass approach
+    async def get_file_content(self, file_path: str) -> str:
+        """Get the complete content of a file from storage with caching"""
+        if file_path in self._content_cache:
+            return self._content_cache[file_path]
         
-        Args:
-            query: User's change request
-            user_id: ID of the user making the request
-            
-        Returns:
-            Dict with generation results
-        """
         try:
-            # Pass 1: File Selection
-            files_to_edit, cached_content = await self.pass_1_file_selection(query)
-            
-            if not files_to_edit:
-                logger.warning("Pass 1: No files selected for editing")
-                return {
-                    'status': 'completed',
-                    'files_to_edit': [],
-                    'operations': [],
-                    'suggestions_created': 0,
-                    'message': 'No files identified for modification'
-                }
-            
-            # Pass 2: Detailed Editing
-            detailed_operations = await self.pass_2_detailed_editing(query, files_to_edit, cached_content)
-            
-            # Create suggestions from operations
-            suggestions_created = len(detailed_operations)
-            
-            return {
-                'status': 'completed',
-                'files_to_edit': files_to_edit,
-                'operations': detailed_operations,
-                'suggestions_created': suggestions_created,
-                'files_modified': len(files_to_edit)
-            }
-            
+            async with get_db() as db:
+                # Get file record to find storage key
+                file_record = await db.file.find_first(
+                    where={
+                        "repo_id": self.repo_id,
+                        "path": file_path
+                    }
+                )
+                
+                if not file_record or not file_record.storage_key:
+                    logger.warning(f"No file record or storage key found for {file_path}")
+                    return ""
+                
+                # The storage_key includes 'docs/' prefix, but bucket is 'docs'
+                storage_path = file_record.storage_key[5:] if file_record.storage_key.startswith('docs/') else file_record.storage_key
+                
+                # Get content from storage
+                content = await storage_service.get_file_content('docs', storage_path)
+                if content and content.strip():
+                    logger.info(f"Retrieved {len(content)} chars from storage for {file_path}")
+                    self._content_cache[file_path] = content
+                    return content
+                else:
+                    logger.warning(f"Storage content is empty for {file_path}")
+                    return ""
+                    
         except Exception as e:
-            logger.error(f"Two-pass generation failed: {e}")
-            return {
-                'status': 'failed',
-                'error': str(e),
-                'files_to_edit': [],
-                'operations': [],
-                'suggestions_created': 0
-            }
+            logger.error(f"Failed to get file content for {file_path}: {e}")
+            return ""
+
+
+class FileSelector:
+    """Handles Pass 1: File selection logic"""
     
-    async def pass_1_file_selection(self, query: str) -> tuple[List[str], Dict[str, str]]:
+    def __init__(self, repo_id: str, openai_service):
+        self.repo_id = repo_id
+        self.openai_service = openai_service
+        self.content_manager = FileContentManager(repo_id)
+    
+    async def select_files_to_edit(self, query: str) -> Tuple[List[str], Dict[str, str]]:
         """
         Pass 1: Identify which files need to be modified
         
@@ -118,47 +115,14 @@ class TwoPassDocumentationGenerator:
         try:
             logger.info("Pass 1: Starting file selection")
             
-            # Get similar chunks using existing logic
-            query_embedding = await self.openai_service.generate_embedding_with_retry(query)
-            if not query_embedding:
-                logger.error("Pass 1: Failed to generate query embedding")
-                return [], {}
-            
-            relevant_chunks = await self.openai_service.search_similar_chunks(
-                query_embedding=query_embedding,
-                repo_id=self.repo_id,
-                limit=30,  # Get more chunks for better file selection
-                similarity_threshold=0.2  # Much lower threshold for testing
-            )
-            
-            logger.info(f"Pass 1: Raw similarity search returned {len(relevant_chunks)} chunks")
-            if relevant_chunks:
-                for i, chunk in enumerate(relevant_chunks[:5]):  # Log first 5 chunks
-                    logger.info(f"Pass 1: Chunk {i}: {chunk['file_path']} (similarity: {chunk.get('similarity', 0.0):.3f})")
-            
-            # Try fallback search if no good chunks found
-            if not relevant_chunks:
-                logger.info("Pass 1: No relevant chunks found, trying fallback search")
-                relevant_chunks = await self.openai_service.search_chunks_fulltext(
-                    query_text=query,
-                    repo_id=self.repo_id,
-                    limit=30
-                )
-            
-            # Filter out chunks with very low similarity scores (less than 0.1)
-            if relevant_chunks:
-                filtered_chunks = [chunk for chunk in relevant_chunks if chunk.get('similarity', 0) >= 0.05]
-                if filtered_chunks:
-                    relevant_chunks = filtered_chunks
-                    logger.info(f"Pass 1: Filtered to {len(relevant_chunks)} chunks with similarity >= 0.05")
-                else:
-                    logger.warning("Pass 1: All chunks have very low similarity scores")
+            # Get relevant chunks using similarity search
+            relevant_chunks = await self._get_relevant_chunks(query)
             
             if not relevant_chunks:
-                logger.warning("Pass 1: No relevant chunks found after fallback search")
+                logger.warning("Pass 1: No relevant chunks found")
                 return [], {}
             
-            # Build file summaries for selection (this fetches full content)
+            # Build file summaries for selection
             file_summaries = await self._build_file_summaries(relevant_chunks)
             
             # Create file selection prompt
@@ -198,63 +162,45 @@ class TwoPassDocumentationGenerator:
             logger.error(f"Pass 1 file selection failed: {e}")
             return [], {}
     
-    async def pass_2_detailed_editing(self, query: str, files_to_edit: List[str], cached_content: Dict[str, str]) -> List[Dict[str, Any]]:
-        """
-        Pass 2: Generate specific operations for each selected file in parallel
-        
-        Args:
-            query: User's change request
-            files_to_edit: List of file paths to edit
-            cached_content: Dict of file_path -> full_content
-            
-        Returns:
-            List of operation dictionaries
-        """
-        logger.info(f"Pass 2: Starting parallel detailed editing for {len(files_to_edit)} files")
-        
-        # Define an async function to process a single file
-        async def process_single_file(file_path: str) -> List[Dict[str, Any]]:
-            try:
-                logger.info(f"Pass 2: Generating operations for {file_path}")
-                
-                # Get full file context
-                file_content = cached_content.get(file_path)
-                
-                if not file_content:
-                    logger.warning(f"Pass 2: No content found for {file_path} in cached_content")
-                    return []
-                
-                # Generate operations for this specific file
-                file_operations = await self._generate_operations_for_file(
-                    query, file_path, file_content
-                )
-                
-                if file_operations:
-                    logger.info(f"Pass 2: Generated {len(file_operations)} operations for {file_path}")
-                    return file_operations
-                else:
-                    logger.warning(f"Pass 2: No operations generated for {file_path}")
-                    return []
-                    
-            except Exception as e:
-                logger.error(f"Pass 2: Failed to generate operations for {file_path}: {e}")
-                return []
-        
-        # Process all files concurrently
-        try:
-            import asyncio
-            tasks = [process_single_file(file_path) for file_path in files_to_edit]
-            results = await asyncio.gather(*tasks)
-            
-            # Flatten results list
-            detailed_operations = [operation for file_ops in results for operation in file_ops]
-            logger.info(f"Pass 2: Generated total of {len(detailed_operations)} operations across {len(files_to_edit)} files")
-            
-            return detailed_operations
-            
-        except Exception as e:
-            logger.error(f"Pass 2: Failed during parallel execution: {e}")
+    async def _get_relevant_chunks(self, query: str) -> List[Dict[str, Any]]:
+        """Get relevant chunks using similarity search with fallback"""
+        # Get similar chunks using existing logic
+        query_embedding = await self.openai_service.generate_embedding_with_retry(query)
+        if not query_embedding:
+            logger.error("Pass 1: Failed to generate query embedding")
             return []
+        
+        relevant_chunks = await self.openai_service.search_similar_chunks(
+            query_embedding=query_embedding,
+            repo_id=self.repo_id,
+            limit=30,  # Get more chunks for better file selection
+            similarity_threshold=0.2  # Much lower threshold for testing
+        )
+        
+        logger.info(f"Pass 1: Raw similarity search returned {len(relevant_chunks)} chunks")
+        if relevant_chunks:
+            for i, chunk in enumerate(relevant_chunks[:5]):  # Log first 5 chunks
+                logger.info(f"Pass 1: Chunk {i}: {chunk['file_path']} (similarity: {chunk.get('similarity', 0.0):.3f})")
+        
+        # Try fallback search if no good chunks found
+        if not relevant_chunks:
+            logger.info("Pass 1: No relevant chunks found, trying fallback search")
+            relevant_chunks = await self.openai_service.search_chunks_fulltext(
+                query_text=query,
+                repo_id=self.repo_id,
+                limit=30
+            )
+        
+        # Filter out chunks with very low similarity scores (less than 0.05)
+        if relevant_chunks:
+            filtered_chunks = [chunk for chunk in relevant_chunks if chunk.get('similarity', 0) >= 0.05]
+            if filtered_chunks:
+                relevant_chunks = filtered_chunks
+                logger.info(f"Pass 1: Filtered to {len(relevant_chunks)} chunks with similarity >= 0.05")
+            else:
+                logger.warning("Pass 1: All chunks have very low similarity scores")
+        
+        return relevant_chunks
     
     async def _build_file_summaries(self, chunks: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """Build file summaries with full content and similarity scores for selection"""
@@ -276,14 +222,12 @@ class TwoPassDocumentationGenerator:
         
         # Fetch full content for each file
         for file_path, summary in file_summaries.items():
-            # Fetch full file content
-            summary['full_content'] = await self._get_full_file_content(file_path)
+            summary['full_content'] = await self.content_manager.get_file_content(file_path)
         
         return file_summaries
     
     def _create_file_selection_prompt(self, query: str, file_summaries: Dict[str, Dict[str, Any]]) -> str:
         """Create the file selection prompt"""
-        
         # Build file list with similarity scores and full content
         file_list = []
         file_count = 0
@@ -294,12 +238,13 @@ class TwoPassDocumentationGenerator:
             file_entry = f"{file_count}.\nFILE PATH: {file_path}\nCONTENT:\n**START OF CONTENT**\n{full_content}\n**END OF CONTENT**"
             file_list.append(file_entry)
         
+        file_list_str = '\n\n'.join(file_list)
         prompt = f"""
 USER QUERY: "{query}"
 
 AVAILABLE FILES:
 
-{'\n\n'.join(file_list)}
+{file_list_str}
 
 Based on the query, ONLY identify files that NEED TO BE MODIFIED. Consider:
 - Files directly related to the requested change
@@ -317,7 +262,6 @@ IMPORTANT:
 
 Return JSON array of file paths:
 """
-        
         return prompt
     
     def _parse_file_selection_response(self, response: str) -> List[str]:
@@ -340,39 +284,73 @@ Return JSON array of file paths:
             logger.error(f"Failed to parse file selection response: {e}")
             logger.error(f"Response was: {response}")
             return []
+
+
+class OperationsGenerator:
+    """Handles Pass 2: Operations generation logic"""
     
-    async def _get_full_file_content(self, file_path: str) -> str:
-        """Get the complete content of a file from storage"""
+    def __init__(self, openai_service):
+        self.openai_service = openai_service
+    
+    async def generate_operations_for_files(
+        self, 
+        query: str, 
+        files_to_edit: List[str], 
+        cached_content: Dict[str, str]
+    ) -> List[Dict[str, Any]]:
+        """
+        Pass 2: Generate specific operations for each selected file in parallel
         
+        Args:
+            query: User's change request
+            files_to_edit: List of file paths to edit
+            cached_content: Dict of file_path -> full_content
+            
+        Returns:
+            List of operation dictionaries
+        """
+        logger.info(f"Pass 2: Starting parallel detailed editing for {len(files_to_edit)} files")
+        
+        # Process all files concurrently
         try:
-            async with get_db() as db:
-                # Get file record to find storage key
-                file_record = await db.file.find_first(
-                    where={
-                        "repo_id": self.repo_id,
-                        "path": file_path
-                    }
-                )
-                
-                if not file_record or not file_record.storage_key:
-                    logger.warning(f"No file record or storage key found for {file_path}")
-                    return ""
-                
-                # The storage_key includes 'docs/' prefix, but bucket is 'docs'
-                storage_path = file_record.storage_key[5:] if file_record.storage_key.startswith('docs/') else file_record.storage_key
-                
-                # Get content from storage
-                content = await storage_service.get_file_content('docs', storage_path)
-                if content and content.strip():
-                    logger.info(f"Retrieved {len(content)} chars from storage for {file_path}")
-                    return content
-                else:
-                    logger.warning(f"Storage content is empty for {file_path}")
-                    return ""
+            tasks = [self._process_single_file(query, file_path, cached_content) for file_path in files_to_edit]
+            results = await asyncio.gather(*tasks)
+            
+            # Flatten results list
+            detailed_operations = [operation for file_ops in results for operation in file_ops]
+            logger.info(f"Pass 2: Generated total of {len(detailed_operations)} operations across {len(files_to_edit)} files")
+            
+            return detailed_operations
+            
+        except Exception as e:
+            logger.error(f"Pass 2: Failed during parallel execution: {e}")
+            return []
+    
+    async def _process_single_file(self, query: str, file_path: str, cached_content: Dict[str, str]) -> List[Dict[str, Any]]:
+        """Process a single file to generate operations"""
+        try:
+            logger.info(f"Pass 2: Generating operations for {file_path}")
+            
+            # Get full file context
+            file_content = cached_content.get(file_path)
+            
+            if not file_content:
+                logger.warning(f"Pass 2: No content found for {file_path} in cached_content")
+                return []
+            
+            # Generate operations for this specific file
+            file_operations = await self._generate_operations_for_file(query, file_path, file_content)
+            
+            if file_operations:
+                logger.info(f"Pass 2: Generated {len(file_operations)} operations for {file_path}")
+                return file_operations
+            else:
+                logger.warning(f"Pass 2: No operations generated for {file_path}")
+                return []
                 
         except Exception as e:
-            logger.error(f"Failed to get file content for {file_path}: {e}")
-            return ""
+            logger.error(f"Pass 2: Failed to generate operations for {file_path}: {e}")
+            return []
     
     async def _generate_operations_for_file(
         self, 
@@ -381,7 +359,6 @@ Return JSON array of file paths:
         file_content: str
     ) -> List[Dict[str, Any]]:
         """Generate operations for a single file"""
-        
         try:
             # Detect file format/type
             file_ext = file_path.split('.')[-1] if '.' in file_path else ''
@@ -417,9 +394,7 @@ Generate operations JSON for this file:
 """
             # Use existing system prompt from operations parser
             from app.utils.prompts import SYSTEM_PROMPT
-            
-            # logger.info(f"Pass 2: File prompt: {file_prompt}")
-            # logger.info(f"Pass 2: File content: {file_content}")
+
             # Generate operations
             operations_response = await self.openai_service.generate_completion_with_retry(
                 messages=[
@@ -441,4 +416,69 @@ Generate operations JSON for this file:
             
         except Exception as e:
             logger.error(f"Failed to generate operations for {file_path}: {e}")
-            return [] 
+            return []
+
+
+class TwoPassDocumentationGenerator:
+    """
+    Service for generating documentation suggestions using a two-pass approach:
+    Pass 1: Identify which files need to be modified
+    Pass 2: Generate specific operations for each file
+    """
+    
+    def __init__(self, repo_id: str):
+        self.repo_id = repo_id
+        self.openai_service = openai_service
+        self.file_selector = FileSelector(repo_id, self.openai_service)
+        self.operations_generator = OperationsGenerator(self.openai_service)
+    
+    async def generate_suggestions(self, query: str, user_id: str) -> Dict[str, Any]:
+        """
+        Generate documentation suggestions using two-pass approach
+        
+        Args:
+            query: User's change request
+            user_id: ID of the user making the request
+            
+        Returns:
+            Dict with generation results
+        """
+        try:
+            # Pass 1: File Selection
+            files_to_edit, cached_content = await self.file_selector.select_files_to_edit(query)
+            
+            if not files_to_edit:
+                logger.warning("Pass 1: No files selected for editing")
+                return {
+                    'status': 'completed',
+                    'files_to_edit': [],
+                    'operations': [],
+                    'suggestions_created': 0,
+                    'message': 'No files identified for modification'
+                }
+            
+            # Pass 2: Detailed Editing
+            detailed_operations = await self.operations_generator.generate_operations_for_files(
+                query, files_to_edit, cached_content
+            )
+            
+            # Create suggestions from operations
+            suggestions_created = len(detailed_operations)
+            
+            return {
+                'status': 'completed',
+                'files_to_edit': files_to_edit,
+                'operations': detailed_operations,
+                'suggestions_created': suggestions_created,
+                'files_modified': len(files_to_edit)
+            }
+            
+        except Exception as e:
+            logger.error(f"Two-pass generation failed: {e}")
+            return {
+                'status': 'failed',
+                'error': str(e),
+                'files_to_edit': [],
+                'operations': [],
+                'suggestions_created': 0
+            } 
