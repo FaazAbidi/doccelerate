@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Github, Check, X, RefreshCw, Search } from 'lucide-react'
+import { ArrowLeft, Github, X, RefreshCw, Search } from 'lucide-react'
 import { Button } from '@/app/components/Button'
 import { Card } from '@/app/components/Card'
 import { TextInput } from '@/app/components/TextInput'
@@ -187,20 +187,19 @@ export default function ManageRepositoriesPage() {
 
           {/* Save Changes Bar */}
           {hasChanges && (
-            <Card variant="default" className="p-4 mb-6 bg-primary/5 border-primary/20">
+            <Card variant="default" className="w-full p-4 bg-primary/5 border-primary/20 mb-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-primary rounded-full"></div>
-                  <span className="text-body-sm text-neutral">
+                  <div className="w-2 h-2 bg-primary rounded-full mr-2"></div>
+                  <span className="text-sm text-neutral text-left">
                     You have unsaved changes to repository access
                   </span>
                 </div>
                 <Button
                   variant="primary"
-                  className="p-6 text-sm"
+                  className="p-6 text-sm w-40"
                   onClick={handleSaveChanges}
                   disabled={isUpdating}
-                  leadingIcon={isUpdating ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 >
                   {isUpdating ? 'Saving...' : 'Save Changes'}
                 </Button>
@@ -219,7 +218,7 @@ export default function ManageRepositoriesPage() {
           )}
         </div>
 
-        {/* Repository List */}
+        {/* Repository Grid */}
         <div className="flex-1 overflow-hidden">
           {filteredRepositories.length === 0 ? (
             <div className="flex items-center justify-center h-full">
@@ -237,51 +236,85 @@ export default function ManageRepositoriesPage() {
               </Card>
             </div>
           ) : (
-            <div className="space-y-3 overflow-y-auto h-full">
-              {filteredRepositories.map((repo) => (
-                <Card key={repo.fullName} variant="default" className="p-4">
-                  <div className="flex items-center gap-4">
-                    <Checkbox
-                      checked={selectedRepos.has(repo.fullName)}
-                      onChange={() => handleToggleRepository(repo.fullName)}
-                      disabled={isUpdating}
-                    />
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-body-md font-medium text-neutral truncate">
-                          {repo.name}
-                        </h3>
-                        {repo.isPrivate && (
-                          <span className="px-2 py-1 text-xs bg-neutral/10 text-neutral rounded">
-                            Private
-                          </span>
-                        )}
-                        {repo.isIncluded && (
-                          <span className="px-2 py-1 text-xs bg-success/10 text-success rounded">
-                            Currently Included
-                          </span>
-                        )}
+            <div className="overflow-y-auto h-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4 m-5">
+                {filteredRepositories.map((repo) => (
+                  <Card 
+                    key={repo.fullName} 
+                    variant="default" 
+                    className={`p-4 transition-all bg-white/40 duration-200 hover:shadow-md cursor-pointer ${
+                      selectedRepos.has(repo.fullName) 
+                        ? 'ring-2 ring-primary/50 bg-primary/5' 
+                        : 'hover:bg-white/70'
+                    }`}
+                    onClick={() => handleToggleRepository(repo.fullName)}
+                  >
+                    <div className="flex flex-col h-full">
+                      {/* Header with checkbox and status badges */}
+                      <div className="flex items-start justify-between mb-3">
+                        <Checkbox
+                          checked={selectedRepos.has(repo.fullName)}
+                          onChange={() => handleToggleRepository(repo.fullName)}
+                          disabled={isUpdating}
+                          className="flex-shrink-0 mt-1"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="flex flex-col gap-1 ml-2">
+                          {repo.isPrivate && (
+                            <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded text-center">
+                              Private
+                            </span>
+                          )}
+                          {repo.isIncluded && (
+                            <span className="px-2 py-1 text-xs bg-success/10 text-success rounded text-center">
+                              Included
+                            </span>
+                          )}
+                        </div>
                       </div>
                       
-                      <p className="text-body-xs text-neutral opacity-60 mb-2">
+                      {/* Repository name */}
+                      <h3 className="text-md font-medium text-neutral mb-2 line-clamp-2">
+                        {repo.name}
+                      </h3>
+                      
+                      {/* Full name */}
+                      <p className="text-xs text-neutral opacity-60 mb-3 break-all">
                         {repo.fullName}
                       </p>
                       
-                      {repo.description && (
-                        <p className="text-body-xs text-neutral opacity-80 line-clamp-2">
-                          {repo.description}
-                        </p>
-                      )}
+                      {/* Description */}
+                      <div className="flex-1 mb-3">
+                        {repo.description ? (
+                          <p className="text-xs text-neutral opacity-80 line-clamp-3">
+                            {repo.description}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-neutral opacity-40 italic">
+                            No description available
+                          </p>
+                        )}
+                      </div>
                       
-                      <div className="flex items-center gap-4 mt-2 text-body-xs text-neutral opacity-60">
-                        <span>Updated {new Date(repo.updatedAt).toLocaleDateString()}</span>
-                        {repo.language && <span>{repo.language}</span>}
+                      {/* Footer with metadata */}
+                      <div className="flex items-center justify-between text-body-xs text-neutral opacity-60 pt-2 border-t border-neutral/10">
+                        <span className="truncate">
+                          {new Date(repo.updatedAt).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            year: '2-digit'
+                          })}
+                        </span>
+                        {repo.language && (
+                          <span className="px-2 py-1 bg-neutral/10 rounded text-xs ml-2 flex-shrink-0">
+                            {repo.language}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
+                  </Card>
+                ))}
+              </div>
             </div>
           )}
         </div>

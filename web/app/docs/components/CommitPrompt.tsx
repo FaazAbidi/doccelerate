@@ -103,7 +103,7 @@ export function CommitPrompt({ modifiedCount, className, hasGithubConnection = t
           <p className="text-caption text-neutral">
             {modifiedCount} file{modifiedCount !== 1 ? 's' : ''} modified
           </p>
-          <p className="text-caption-sm text-neutral/70">Commit your changes to GitHub</p>
+          <p className="text-sm text-neutral">Commit your changes to GitHub</p>
           <div className="mt-2 flex items-center gap-2">
             <TextInput
               value={commitMessage}
@@ -122,7 +122,7 @@ export function CommitPrompt({ modifiedCount, className, hasGithubConnection = t
               {isCommitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Commit'}
             </Button>
           </div>
-          {error && <p className="text-caption-sm text-red-500 mt-1">{error}</p>}
+          {error && <p className="text-xs text-primary w-52 mt-2">{error}</p>}
         </div>
       </div>
     </div>

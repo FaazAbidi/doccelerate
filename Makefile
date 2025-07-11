@@ -15,6 +15,33 @@ build:
 logs:
 	docker-compose logs -f
 
+logs-web:
+	docker-compose logs -f web
+
+logs-api:
+	docker-compose logs -f api
+
+logs-celery:
+	docker-compose logs -f celery-worker
+
+stop-web:
+	docker-compose stop web
+
+stop-api:
+	docker-compose stop api
+
+stop-celery:
+	docker-compose stop celery-worker
+
+up-web:
+	docker-compose up -d web
+
+up-api:
+	docker-compose up -d api
+
+up-celery:
+	docker-compose up -d celery-worker
+
 dev:
 	docker-compose up --build
 

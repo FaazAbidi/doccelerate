@@ -1,14 +1,4 @@
 services:
-  # Redis Service
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-
   # FastAPI Backend Service
   api:
     build:
@@ -18,15 +8,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - REDIS_URL=redis://redis:6379
       - C_FORCE_ROOT=1
     env_file:
       - .env
     volumes:
       - ./api:/app
       - /app/node_modules
-    depends_on:
-      - redis
 
   # Celery Worker Service
   celery-worker:
@@ -35,30 +22,28 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      - REDIS_URL=redis://redis:6379
       - C_FORCE_ROOT=1
     env_file:
       - .env
     volumes:
       - ./api:/app
       - /app/node_modules
-    command: ["sh", "-c", "uv run prisma generate && uv run celery -A app.tasks.celery_app worker --loglevel=info"]
+    command: ["sh", "-c", "uv run prisma generate && uv run python worker.py"]
     depends_on:
       - api
-      - redis
 
   # Next.js Frontend Service
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
-      target: development
+      # target: development
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://api:8000
-      - NODE_ENV=development
+      - NODE_ENV=production
     env_file:
       - .env
     volumes:

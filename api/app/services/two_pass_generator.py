@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from app.services.openai_client import openai_service
 from app.services.operations_parser import parse_operations_json
 from app.services.storage import storage_service
+from app.services.elbow_method import ElbowBasedRetrieval
 from app.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -58,40 +59,47 @@ class FileContentManager:
         self._content_cache: Dict[str, str] = {}
     
     async def get_file_content(self, file_path: str) -> str:
-        """Get the complete content of a file from storage with caching"""
+        """Get the complete content of a file from storage with caching and retry logic"""
         if file_path in self._content_cache:
             return self._content_cache[file_path]
         
-        try:
-            async with get_db() as db:
-                # Get file record to find storage key
-                file_record = await db.file.find_first(
-                    where={
-                        "repo_id": self.repo_id,
-                        "path": file_path
-                    }
-                )
-                
-                if not file_record or not file_record.storage_key:
-                    logger.warning(f"No file record or storage key found for {file_path}")
-                    return ""
-                
-                # The storage_key includes 'docs/' prefix, but bucket is 'docs'
-                storage_path = file_record.storage_key[5:] if file_record.storage_key.startswith('docs/') else file_record.storage_key
-                
-                # Get content from storage
-                content = await storage_service.get_file_content('docs', storage_path)
-                if content and content.strip():
-                    logger.info(f"Retrieved {len(content)} chars from storage for {file_path}")
-                    self._content_cache[file_path] = content
-                    return content
-                else:
-                    logger.warning(f"Storage content is empty for {file_path}")
-                    return ""
+        # Retry logic for connection failures
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                async with get_db() as db:
+                    # Get file record to find storage key
+                    file_record = await db.file.find_first(
+                        where={
+                            "repo_id": self.repo_id,
+                            "path": file_path
+                        }
+                    )
                     
-        except Exception as e:
-            logger.error(f"Failed to get file content for {file_path}: {e}")
-            return ""
+                    if not file_record or not file_record.storage_key:
+                        logger.warning(f"No file record or storage key found for {file_path}")
+                        return ""
+                    
+                    # The storage_key includes 'docs/' prefix, but bucket is 'docs'
+                    storage_path = file_record.storage_key[5:] if file_record.storage_key.startswith('docs/') else file_record.storage_key
+                    
+                    # Get content from storage
+                    content = await storage_service.get_file_content('docs', storage_path)
+                    if content and content.strip():
+                        logger.info(f"Retrieved {len(content)} chars from storage for {file_path}")
+                        self._content_cache[file_path] = content
+                        return content
+                    else:
+                        logger.warning(f"Storage content is empty for {file_path}")
+                        return ""
+                        
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"Attempt {attempt + 1} failed for {file_path}: {e}. Retrying...")
+                    await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                else:
+                    logger.error(f"Failed to get file content for {file_path} after {max_retries + 1} attempts: {e}")
+                    return ""
 
 
 class FileSelector:
@@ -101,6 +109,7 @@ class FileSelector:
         self.repo_id = repo_id
         self.openai_service = openai_service
         self.content_manager = FileContentManager(repo_id)
+        self.elbow_retrieval = ElbowBasedRetrieval(openai_service, min_docs=3, max_docs=50)
     
     async def select_files_to_edit(self, query: str) -> Tuple[List[str], Dict[str, str]]:
         """
@@ -163,42 +172,42 @@ class FileSelector:
             return [], {}
     
     async def _get_relevant_chunks(self, query: str) -> List[Dict[str, Any]]:
-        """Get relevant chunks using similarity search with fallback"""
-        # Get similar chunks using existing logic
+        """Get relevant chunks using elbow method for dynamic retrieval"""
+        # Generate query embedding
         query_embedding = await self.openai_service.generate_embedding_with_retry(query)
         if not query_embedding:
             logger.error("Pass 1: Failed to generate query embedding")
             return []
         
-        relevant_chunks = await self.openai_service.search_similar_chunks(
+        # Use elbow method to get optimal number of chunks
+        relevant_chunks, analysis_metadata = await self.elbow_retrieval.search_similar_chunks_with_elbow(
             query_embedding=query_embedding,
             repo_id=self.repo_id,
-            limit=30,  # Get more chunks for better file selection
-            similarity_threshold=0.2  # Much lower threshold for testing
+            initial_limit=100,  # Fetch more initially for better elbow analysis
+            min_similarity=0.05  # Very low threshold for comprehensive analysis
         )
         
-        logger.info(f"Pass 1: Raw similarity search returned {len(relevant_chunks)} chunks")
-        if relevant_chunks:
-            for i, chunk in enumerate(relevant_chunks[:5]):  # Log first 5 chunks
-                logger.info(f"Pass 1: Chunk {i}: {chunk['file_path']} (similarity: {chunk.get('similarity', 0.0):.3f})")
+        logger.info(f"Pass 1: Elbow method returned {len(relevant_chunks)} chunks")
+        logger.info(f"Pass 1: Analysis metadata: {analysis_metadata}")
         
-        # Try fallback search if no good chunks found
-        if not relevant_chunks:
-            logger.info("Pass 1: No relevant chunks found, trying fallback search")
+        if relevant_chunks:
+            # Log first few chunks with their similarity scores
+            for i, chunk in enumerate(relevant_chunks[:5]):
+                logger.info(f"Pass 1: Chunk {i}: {chunk['file_path']} (similarity: {chunk.get('similarity', 0.0):.3f})")
+            
+            # Log the elbow analysis results
+            if 'similarity_range' in analysis_metadata:
+                sim_range = analysis_metadata['similarity_range']
+                logger.info(f"Pass 1: Similarity range: {sim_range['highest']:.3f} to {sim_range['cutoff_score']:.3f}")
+        else:
+            # Try fallback search if elbow method returns no results
+            logger.warning("Pass 1: Elbow method returned no chunks, trying fallback")
             relevant_chunks = await self.openai_service.search_chunks_fulltext(
                 query_text=query,
                 repo_id=self.repo_id,
-                limit=30
+                limit=10
             )
-        
-        # Filter out chunks with very low similarity scores (less than 0.05)
-        if relevant_chunks:
-            filtered_chunks = [chunk for chunk in relevant_chunks if chunk.get('similarity', 0) >= 0.05]
-            if filtered_chunks:
-                relevant_chunks = filtered_chunks
-                logger.info(f"Pass 1: Filtered to {len(relevant_chunks)} chunks with similarity >= 0.05")
-            else:
-                logger.warning("Pass 1: All chunks have very low similarity scores")
+            logger.info(f"Pass 1: Fallback search returned {len(relevant_chunks)} chunks")
         
         return relevant_chunks
     
@@ -220,9 +229,45 @@ class FileSelector:
                 # If we already have this file, keep the higher similarity score
                 file_summaries[file_path]['similarity'] = max(file_summaries[file_path]['similarity'], similarity)
         
-        # Fetch full content for each file
-        for file_path, summary in file_summaries.items():
-            summary['full_content'] = await self.content_manager.get_file_content(file_path)
+        # Fetch full content for all files with controlled concurrency
+        file_paths = list(file_summaries.keys())
+        logger.info(f"Pass 1: Fetching content for {len(file_paths)} files with concurrency limit")
+        
+        # Limit concurrent file content requests to prevent overwhelming storage service
+        max_concurrent_requests = min(3, len(file_paths))  # Max 3 concurrent requests (more conservative)
+        semaphore = asyncio.Semaphore(max_concurrent_requests)
+        
+        async def fetch_with_semaphore(file_path: str):
+            async with semaphore:
+                return await self.content_manager.get_file_content(file_path)
+        
+        content_tasks = [
+            fetch_with_semaphore(file_path)
+            for file_path in file_paths
+        ]
+        
+        file_contents = await asyncio.gather(*content_tasks, return_exceptions=True)
+        
+        # Assign retrieved content to summaries
+        successful_loads = 0
+        failed_loads = 0
+        for i, file_path in enumerate(file_paths):
+            content = file_contents[i]
+            if isinstance(content, Exception):
+                logger.error(f"Pass 1: Error fetching content for {file_path}: {content}")
+                file_summaries[file_path]['full_content'] = ""
+                failed_loads += 1
+            else:
+                file_summaries[file_path]['full_content'] = content
+                if content.strip():  # Only count non-empty content as successful
+                    successful_loads += 1
+        
+        logger.info(f"Pass 1: File content retrieval complete - {successful_loads} successful, {failed_loads} failed")
+        
+        # Warn if too many files failed to load
+        if failed_loads > successful_loads and len(file_paths) > 1:
+            logger.warning(f"Pass 1: High failure rate in file content retrieval ({failed_loads}/{len(file_paths)} failed)")
+            logger.warning("Pass 1: Consider checking storage service health and connection limits")
         
         return file_summaries
     

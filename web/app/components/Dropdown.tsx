@@ -144,6 +144,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
           ref={ref}
           role="combobox"
           aria-expanded={isOpen}
+          aria-controls="dropdown-listbox"
           aria-haspopup="listbox"
           tabIndex={disabled ? -1 : 0}
           className={cn(
@@ -179,6 +180,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
           <ul
             ref={listRef}
             role="listbox"
+            id="dropdown-listbox"
             className={cn(
               "absolute z-50 w-full mt-1 max-h-60 overflow-auto bg-white border border-neutral/20 rounded-[20px] shadow-lg",
               "scrollbar-thin scrollbar-track-transparent scrollbar-thumb-neutral/20"

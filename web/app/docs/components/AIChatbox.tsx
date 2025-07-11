@@ -100,7 +100,7 @@ export function AIChatbox({ onSendQuery, status = 'idle', disabled = false, curr
 
         {/* Disabled message */}
         {disabled && (
-          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-neutral/90 backdrop-blur-sm rounded-[16px] px-4 py-2">
+          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-neutral/65 backdrop-blur-sm rounded-[16px] px-4 py-2">
             <div className="flex items-center space-x-2 text-white">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span className="text-caption font-medium">
@@ -126,7 +126,7 @@ export function AIChatbox({ onSendQuery, status = 'idle', disabled = false, curr
                 {status === 'processing'
                   ? (currentJob?.metadata?.current_step 
                       ? `${formatStep(currentJob.metadata.current_step)}${currentJob.progress ? ` (${Math.round(currentJob.progress * 100)}%)` : ''}`
-                      : 'AI is thinking...')
+                      : 'Warming up the engines…')
                   : status === 'no_suggestions'
                     ? 'No suggestions'
                     : 'Something went wrong'}

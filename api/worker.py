@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Celery Worker Entry Point
 
@@ -15,10 +14,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.tasks.celery_app import celery_app
 
 if __name__ == "__main__":
-    # Start the Celery worker
+    # Start the Celery worker with multiple threads
     celery_app.start([
         "worker",
         "--loglevel=info",
-        "--concurrency=1",  # Single worker for Railway
-        "--pool=solo",      # Use solo pool for better Railway compatibility
-    ]) 
+        "--concurrency=5",
+        "--pool=prefork",
+    ])

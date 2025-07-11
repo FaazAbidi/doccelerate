@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Github, ExternalLink, Unlink, Settings } from 'lucide-react'
+import Image from 'next/image'
+import { Github, ExternalLink, Unlink } from 'lucide-react'
 import { Card } from '@/app/components/Card'
 import { Button } from '@/app/components/Button'
 import { disconnectGithubAccount } from '@/app/actions/githubConnect'
@@ -20,8 +21,8 @@ export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: 
     const clientId = process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID
     const redirectUri = `${window.location.origin}/api/auth/github/callback`
     
-    // Use minimal scopes initially - we'll request repo access per repository
-    const scope = 'read:user user:email'
+    // Request repository access to fetch both public and private repositories
+    const scope = 'read:user user:email repo'
     
     // Generate a random state for security
     const state = Math.random().toString(36).substring(2, 15)
@@ -29,15 +30,13 @@ export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: 
     // Store state in sessionStorage for verification
     sessionStorage.setItem('github_oauth_state', state)
     
-    // GitHub OAuth URL with repository selection parameters
+    // GitHub OAuth URL parameters
     const params = new URLSearchParams({
       client_id: clientId!,
       redirect_uri: redirectUri,
       scope: scope,
       state: state,
       allow_signup: 'true',
-      // Request repository selection during authorization
-      // This will prompt users to select specific repositories
       login: '', // Let user choose the account
     })
     
@@ -45,10 +44,7 @@ export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: 
     window.location.href = githubAuthUrl
   }
 
-  const handleManageRepositories = () => {
-    // Direct users to repository selection page
-    window.open('/repos/manage', '_blank')
-  }
+
 
   const handleDisconnect = async () => {
     setIsDisconnecting(true)
@@ -88,9 +84,11 @@ export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: 
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-3">
                 {githubAvatarUrl && (
-                  <img
+                  <Image
                     src={githubAvatarUrl}
                     alt={githubUsername || 'GitHub Avatar'}
+                    width={32}
+                    height={32}
                     className="w-8 h-8 rounded-full border border-neutral/20"
                   />
                 )}
@@ -103,16 +101,7 @@ export function GithubConnect({ isConnected, githubUsername, githubAvatarUrl }: 
                   </div>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  leadingIcon={<Settings className="w-4 h-4" />}
-                  onClick={handleManageRepositories}
-                  className="w-full sm:w-auto"
-                >
-                  Manage Repos
-                </Button>
+              <div className="flex gap-3">
                 <Button
                   variant="secondary"
                   size="sm"

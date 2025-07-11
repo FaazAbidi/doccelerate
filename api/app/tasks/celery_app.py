@@ -23,6 +23,12 @@ celery_app.conf.update(
     result_backend_max_retries=10,  # Max retries for result backend
     task_acks_late=True,  # Acknowledge tasks after completion
     worker_prefetch_multiplier=1,  # Process one task at a time
+    
+    # CRITICAL: Memory management settings to prevent double free errors
+    worker_max_tasks_per_child=50,  # Restart workers after 50 tasks to prevent memory leaks
+    worker_disable_rate_limits=True,  # Disable rate limits that can cause memory issues
+    worker_max_memory_per_child=500000,  # Max 500MB per worker (adjust based on your system)
+    
     # Additional settings to handle exceptions better
     result_accept_content=["json", "pickle"],  # Accept JSON and pickle for results
     task_reject_on_worker_lost=True,  # Reject tasks when worker is lost

@@ -35,12 +35,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Debug logging
-    console.log('GitHub OAuth callback - Code received:', !!code)
-    console.log('GitHub OAuth callback - State received:', !!state)
-    console.log('GitHub OAuth callback - Client ID exists:', !!process.env.GITHUB_CLIENT_ID)
-    console.log('GitHub OAuth callback - Client Secret exists:', !!process.env.GITHUB_CLIENT_SECRET)
-    console.log('GitHub OAuth callback - Base URL:', baseUrl)
 
     // Exchange code for access token
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {

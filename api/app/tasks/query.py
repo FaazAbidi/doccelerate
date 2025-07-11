@@ -13,7 +13,7 @@ import logging
 from typing import Dict, Any
 
 from .celery_app import celery_app
-from app.database import prisma
+from app.database import get_db
 from app.services.operations_parser import parse_llm_response_to_suggestions, OperationParseError
 from app.services.two_pass_generator import TwoPassDocumentationGenerator
 from app.services.job_service import JobService
@@ -41,8 +41,17 @@ def process_query(self, query: str, user_id: str, repo_id: str) -> Dict[str, Any
     """
     try:
         logger.info("Processing query using two-pass approach")
-        result = asyncio.run(_run_query_two_pass(self, query, user_id, repo_id))
-        return result
+        
+        # Create new event loop for this worker task
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            result = loop.run_until_complete(_run_query_two_pass(self, query, user_id, repo_id))
+            return result
+        finally:
+            loop.close()
+            
     except Exception as e:
         logger.error(f"Query processing error: {e}")
         logger.error(traceback.format_exc())
@@ -63,9 +72,6 @@ async def _run_query_two_pass(
 ) -> Dict[str, Any]:
     """Two-pass query processing implementation"""
     try:
-        # Connect to database
-        await prisma.connect()
-        
         # Initialize query processor
         query_processor = QueryProcessor(current_task, user_id, repo_id)
         
@@ -76,18 +82,19 @@ async def _run_query_two_pass(
         
     except Exception as e:
         # Update job with failure status
-        await JobService.update_job_progress(
-            current_task.request.id, user_id, 'failed', None, 'failed', str(e)
-        )
+        async with get_db() as db:
+            await JobService.update_job_progress(
+                current_task.request.id, user_id, 'failed', None, 'failed', str(e)
+            )
 
-        # Update job metadata with failure info
-        failure_message = f"Two-pass query failed: {str(e)}"
-        await JobService.update_job_completion(
-            task_id=current_task.request.id,
-            user_id=user_id,
-            suggestions_created=0,
-            message=failure_message
-        )
+            # Update job metadata with failure info
+            failure_message = f"Two-pass query failed: {str(e)}"
+            await JobService.update_job_completion(
+                task_id=current_task.request.id,
+                user_id=user_id,
+                suggestions_created=0,
+                message=failure_message
+            )
         
         return {
             "status": "failed",
@@ -96,11 +103,6 @@ async def _run_query_two_pass(
             "query": query[:100] + "..." if len(query) > 100 else query,
             "repo_id": repo_id
         }
-        
-    finally:
-        # Cleanup database connection
-        if prisma.is_connected():
-            await prisma.disconnect()
 
 
 class QueryProcessor:
@@ -115,15 +117,18 @@ class QueryProcessor:
     async def process(self, query: str) -> Dict[str, Any]:
         """Process the query through the two-pass approach"""
         
+        # Initialize job metadata with repo_id
+        await self._initialize_job_metadata()
+        
         # Step 1: Starting
-        await self._update_progress('starting', 0)
-        
+        await self._update_progress('Warming up the engines…', 0)
+
         # Step 2: Initialize two-pass generator
-        await self._update_progress('initializing_two_pass', 10)
+        await self._update_progress('Understanding your request', 10)
         two_pass_generator = TwoPassDocumentationGenerator(self.repo_id)
-        
+            
         # Step 3: Two-pass generation
-        await self._update_progress('two_pass_generation', 20)
+        await self._update_progress('Selecting the right files', 20)
         generation_result = await two_pass_generator.generate_suggestions(query, self.user_id)
         
         if generation_result['status'] == 'failed':
@@ -134,13 +139,13 @@ class QueryProcessor:
             return await self._handle_no_suggestions(query, generation_result)
         
         # Step 4: Create suggestions from operations
-        await self._update_progress('creating_suggestions', 60)
+        await self._update_progress('Generating suggestions', 60)
         suggestions = await self._create_suggestions_from_operations(
             generation_result.get('operations', [])
         )
         
         # Step 5: Verify suggestions
-        await self._update_progress('verifying_suggestions', 80)
+        await self._update_progress('Validating suggestions', 80)
         
         # Update job metadata with completion info
         completion_message = self._get_completion_message(suggestions)
@@ -164,6 +169,35 @@ class QueryProcessor:
             "repo_id": self.repo_id,
             "suggestion_ids": [s['id'] for s in suggestions] if suggestions else []
         }
+    
+    async def _initialize_job_metadata(self):
+        """Initialize job metadata with repo_id to prevent warnings"""
+        try:
+            async with get_db() as db:
+                # Get existing job to check if metadata needs initialization
+                existing_job = await db.job.find_unique(
+                    where={"task_id": self.task_id}
+                )
+                
+                if existing_job:
+                    # Parse existing metadata
+                    import json
+                    try:
+                        metadata = json.loads(existing_job.metadata) if existing_job.metadata else {}
+                    except (json.JSONDecodeError, TypeError):
+                        metadata = {}
+                    
+                    # Add repo_id if missing
+                    if not metadata.get("repo_id"):
+                        metadata["repo_id"] = self.repo_id
+                        await db.job.update(
+                            where={"task_id": self.task_id},
+                            data={"metadata": json.dumps(metadata)}
+                        )
+                        logger.info(f"Initialized job metadata with repo_id for task {self.task_id}")
+                        
+        except Exception as e:
+            logger.warning(f"Failed to initialize job metadata: {e}")
     
     async def _update_progress(self, step: str, progress: int, state: str = 'PROGRESS'):
         """Update task progress"""

@@ -40,8 +40,9 @@ async def run_query(request: QueryRequest):
     if not request.repo_id:
         raise HTTPException(status_code=400, detail="Repository ID is required")
     
-    # Validate that repo exists and user has access
+    # Validate repo access and create job record in single database connection
     async with get_db() as db:
+        # Validate that repo exists and user has access
         repo = await db.repo.find_unique(
             where={"id": request.repo_id},
             include={"users": True}
@@ -53,16 +54,15 @@ async def run_query(request: QueryRequest):
         # Check if user owns the repo
         if repo.owner_id != request.user_id:
             raise HTTPException(status_code=403, detail="Access denied to repository")
-    
-    # Start the query processing task
-    task = process_query.delay(
-        query=request.query,
-        user_id=request.user_id,
-        repo_id=request.repo_id
-    )
-    
-    # Create job record in database
-    async with get_db() as db:
+        
+        # Start the query processing task (this is fast, doesn't block database connection)
+        task = process_query.delay(
+            query=request.query,
+            user_id=request.user_id,
+            repo_id=request.repo_id
+        )
+        
+        # Create job record in the same database transaction
         job_metadata = {
             "repo_id": request.repo_id,
             "query": request.query[:500],  # Truncate for storage

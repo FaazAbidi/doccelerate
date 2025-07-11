@@ -31,6 +31,8 @@ export async function sendAIQuery(message: string): Promise<QueryResponse> {
     throw new Error("Not authenticated")
   }
 
+  console.log("checkpoint 1", new Date().toISOString())
+
   const repoId = await getActiveRepoId()
   if (!repoId) {
     throw new Error("No active repository selected. Please select a repository first.")
@@ -50,6 +52,8 @@ export async function sendAIQuery(message: string): Promise<QueryResponse> {
       }),
     })
 
+    console.log("checkpoint 2", new Date().toISOString())
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
       throw new Error(errorData.detail || `API error: ${response.status}`)
@@ -68,9 +72,11 @@ export async function sendAIQuery(message: string): Promise<QueryResponse> {
       status: 'processing', // Start as processing since we just queued the task
       timestamp: new Date(),
     }
+    console.log("checkpoint 3", new Date().toISOString())
 
     return queryResponse
-    
+
+
   } catch (error) {
     console.error('Failed to send AI query:', error)
     throw error

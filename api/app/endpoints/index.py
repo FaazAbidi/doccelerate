@@ -1,11 +1,13 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import json
+import logging
 
 from app.database import get_db
 from app.tasks.index import process_indexing
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 class IndexRequest(BaseModel):
     user_id: str
@@ -72,15 +74,21 @@ async def run_index(request: IndexRequest):
             }
     
     # Start the indexing task
-    task = process_indexing.delay(
-        repo_id=profile.active_repo.id,
-        user_id=request.user_id,
-        github_full_name=profile.active_repo.github_full_name,
-        branch=profile.active_branch,
-        docs_directory=profile.active_directory,
-        github_access_token=profile.github_access_token,
-        soft_reindex=request.soft_reindex
-    )
+    try:
+        logger.info(f"Dispatching indexing task: repo_id={profile.active_repo.id}, soft_reindex={request.soft_reindex}")
+        task = process_indexing.delay(
+            repo_id=profile.active_repo.id,
+            user_id=request.user_id,
+            github_full_name=profile.active_repo.github_full_name,
+            branch=profile.active_branch,
+            docs_directory=profile.active_directory,
+            github_access_token=profile.github_access_token,
+            soft_reindex=request.soft_reindex
+        )
+        logger.info(f"Task dispatched successfully: task_id={task.id}")
+    except Exception as e:
+        logger.error(f"Failed to dispatch indexing task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start indexing: {str(e)}")
     
     # Create job record in database
     async with get_db() as db:

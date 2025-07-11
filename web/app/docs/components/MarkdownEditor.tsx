@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { EditorView } from '@codemirror/view'
 import { EditorState } from '@codemirror/state'
 import { basicSetup } from 'codemirror'
@@ -26,6 +26,8 @@ export function MarkdownEditor({
   const viewRef = useRef<EditorView | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
   const initialValueRef = useRef<string>('')
+
+  const memoizedOnChange = useCallback(onChange, [onChange])
 
   useEffect(() => {
     if (!editorRef.current) return
@@ -103,7 +105,7 @@ export function MarkdownEditor({
       EditorView.updateListener.of((update) => {
         if (update.changes.empty === false) {
           const newValue = update.state.doc.toString()
-          onChange(newValue)
+          memoizedOnChange(newValue)
         }
       }),
       EditorState.readOnly.of(readOnly),
@@ -132,7 +134,7 @@ export function MarkdownEditor({
       viewRef.current = null
       setIsInitialized(false)
     }
-  }, [theme, readOnly])
+  }, [theme, readOnly, memoizedOnChange])
 
   // Only update the editor content if the value prop changes from outside
   // and it's different from what was initially set

@@ -190,7 +190,7 @@ export default function ReposPage() {
                 <Button
                     variant="outline"
                     size="md"
-                    className="bg-transparent border-neutral/10 hover:border-neutral/20 hover:text-neutral hover:bg-orange-500/10"
+                    className="bg-transparent border-neutral/10 hover:bg-neutral/15"
                   >
                     <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
                    <p className="text-sm text-neutral font-medium">Read-only mode</p>
@@ -260,16 +260,8 @@ export default function ReposPage() {
                     <Github className="w-12 h-12 text-neutral opacity-40 mx-auto mb-4" />
                     <h3 className="text-heading-md text-neutral mb-2">No repositories found</h3>
                     <p className="text-body-md text-neutral opacity-80 mb-6">
-                      Sync your GitHub repositories or add a public repository to get started.
+                      Manage access to your GitHub repositories or add a public repository to get started. By default, all your repositories are excluded.
                     </p>
-                    <div className="flex justify-center space-x-4">
-                      <Button variant="primary" size="md" onClick={handleSyncRepos}>
-                        Sync GitHub Repos
-                      </Button>
-                      <Button variant="secondary" size="md" onClick={() => setShowAddForm(true)}>
-                        Add Public Repo
-                      </Button>
-                    </div>
                   </Card>
                 </div>
               ) : (
@@ -335,7 +327,7 @@ export default function ReposPage() {
             <>
               {repositories.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
-                  <Card variant="default" className="text-center py-12 max-w-md">
+                  <Card variant="default" className="text-center py-12 max-w-md mb-10">
                     <Github className="w-12 h-12 text-neutral opacity-40 mx-auto mb-4" />
                     <h3 className="text-heading-md text-neutral mb-2">Add a public repository</h3>
                     <p className="text-body-md text-neutral opacity-80 mb-6">
