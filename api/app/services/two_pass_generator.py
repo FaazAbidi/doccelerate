@@ -200,7 +200,7 @@ class TwoPassDocumentationGenerator:
     
     async def pass_2_detailed_editing(self, query: str, files_to_edit: List[str], cached_content: Dict[str, str]) -> List[Dict[str, Any]]:
         """
-        Pass 2: Generate specific operations for each selected file
+        Pass 2: Generate specific operations for each selected file in parallel
         
         Args:
             query: User's change request
@@ -210,11 +210,10 @@ class TwoPassDocumentationGenerator:
         Returns:
             List of operation dictionaries
         """
-        detailed_operations = []
+        logger.info(f"Pass 2: Starting parallel detailed editing for {len(files_to_edit)} files")
         
-        logger.info(f"Pass 2: Starting detailed editing for {len(files_to_edit)} files")
-        
-        for file_path in files_to_edit:
+        # Define an async function to process a single file
+        async def process_single_file(file_path: str) -> List[Dict[str, Any]]:
             try:
                 logger.info(f"Pass 2: Generating operations for {file_path}")
                 
@@ -223,7 +222,7 @@ class TwoPassDocumentationGenerator:
                 
                 if not file_content:
                     logger.warning(f"Pass 2: No content found for {file_path} in cached_content")
-                    continue
+                    return []
                 
                 # Generate operations for this specific file
                 file_operations = await self._generate_operations_for_file(
@@ -231,17 +230,31 @@ class TwoPassDocumentationGenerator:
                 )
                 
                 if file_operations:
-                    detailed_operations.extend(file_operations)
                     logger.info(f"Pass 2: Generated {len(file_operations)} operations for {file_path}")
+                    return file_operations
                 else:
                     logger.warning(f"Pass 2: No operations generated for {file_path}")
+                    return []
                     
             except Exception as e:
                 logger.error(f"Pass 2: Failed to generate operations for {file_path}: {e}")
-                continue
+                return []
         
-        logger.info(f"Pass 2: Generated total of {len(detailed_operations)} operations")
-        return detailed_operations
+        # Process all files concurrently
+        try:
+            import asyncio
+            tasks = [process_single_file(file_path) for file_path in files_to_edit]
+            results = await asyncio.gather(*tasks)
+            
+            # Flatten results list
+            detailed_operations = [operation for file_ops in results for operation in file_ops]
+            logger.info(f"Pass 2: Generated total of {len(detailed_operations)} operations across {len(files_to_edit)} files")
+            
+            return detailed_operations
+            
+        except Exception as e:
+            logger.error(f"Pass 2: Failed during parallel execution: {e}")
+            return []
     
     async def _build_file_summaries(self, chunks: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         """Build file summaries with full content and similarity scores for selection"""
