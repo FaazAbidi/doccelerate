@@ -3,24 +3,9 @@
   <h1>Doccelerate – AI Powered Documentation Editor</h1>
 </div>
 
-Hello!  This is a side-project I put together for the **Pluno Engineering Challenge**.  It lets you describe a documentation change in plain English and then shows AI-generated edit suggestions that you can tweak or approve.
+Hello!  This is a side-project I put together.  It lets you describe a documentation change in plain English and then shows AI-generated edit suggestions that you can tweak or approve.
 
 🟢 **Give it a spin:** https://doccelerate-web-production.up.railway.app/
-
----
-
-## 📜 Challenge Recap
-
-Here’s how I understood the brief:
-
-Pluno asked me to build an app that:
-
-1. Lets a user describe a documentation change in plain English.
-2. Uses AI to propose edits across a Markdown knowledge base (OpenAI Agents SDK docs in this case).
-3. Shows the diff so the user can **accept / reject / tweak** every suggestion.
-4. Persists the approved updates.
-
-I had about a week, so I focused on getting the happy-path working end-to-end rather than polishing every edge case.
 
 ---
 
@@ -135,25 +120,6 @@ NEXT_PUBLIC_APP_NAME="Doccelerate"
 
 ---
 
-## ⚖️ Trade-Offs & Shortcuts
-
-Since this was a time-boxed prototype I consciously took a few shortcuts.  I’ve listed the biggest ones below together with what I’d tackle in a production setting.
-
-| # | Decision | Rationale (Speed) | Proper Production Alternative |
-|---|-----------|------------------|------------------------------|
-| 1 | **Operations-list editing instead of unified-patch** | Simplified JSON diff was less error-prone than text-patch application. | Adopt *git apply* style patches or LLM-guided structured edits with conflict resolution. |
-| 2 | **Upstash Redis** | No local install, instant cloud queue. | Managed Redis (AWS ElastiCache) inside VPC with IAM auth. |
-| 3 | **Green-field FastAPI + Next.js instead of template** | Faster for me to scaffold from scratch & know every line. | Use an opinionated template or spend time creating our own standards, consistent CI/CD pipelines. |
-| 4 | **Minimal folder organisation** | Ship quickly. | Feature-oriented modular monorepo, strict domain boundaries. |
-| 5 | **Supabase for Auth + Storage + DB** | One-stop backend frees time. | Dedicated auth service, S3, managed Postgres. |
-| 6 | **OpenAI SDK only** | Avoid extra abstraction. | LangChain / CrewAI for tool-oriented agents, better eval harness. |
-| 7 | **No unit / e2e tests** | Time-boxed. | Pytest + Playwright coverage, CI gates. |
-| 8 | **Secrets in .env** | Local dev simplicity. | Use HashiCorp Vault / AWS Secrets Manager, GitHub OIDC. |
-| 9 | **Single queue for all jobs** | Simpler infra. | Separate high/low-priority queues, autoscaling workers. |
-| 10 | **Minimal upfront research on existing solutions** | Jumped straight into building to meet the deadline. | Spend more time studying similar products & academic work before choosing architecture / algorithms. |
-
----
-
 ## 🧠 Two-Pass AI Documentation Generation
 
 I've implemented a more intelligent approach to documentation updates using a two-pass system:
@@ -202,8 +168,4 @@ Most of the stack lives on Railway’s free tier – it was the quickest way to 
 | **Next.js Web** | Node 18 | Deployed as a static build with server actions enabled |
 | **Supabase** | External | Hosted separately (auth, Postgres + pgvector, storage) |
 | **Upstash Redis** | External | Used for the Celery queue – no local server needed |
-
----
-
-## 📄 Footnotes
-Pluno AI challenge submission by **Faaz Abidi**. 
+ 
