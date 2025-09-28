@@ -6,6 +6,7 @@ export default function Home() {
     <>
       {/* Page content */}
       <div className="absolute top-0 left-0 w-screen h-screen flex flex-col">
+
         
         
         {/* Hero (fills the remaining space) */}

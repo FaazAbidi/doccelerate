@@ -4,6 +4,7 @@ import DotGrid from "@/app/components/DotGrid";
 import Navbar from "@/app/components/Navbar";
 import { AuthProvider } from "@/app/components/AuthProvider";
 import Providers from "./providers";
+import { AlertTriangle } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Doccelerate - Accelerate Your Document Processing",
@@ -64,6 +65,23 @@ export default function RootLayout({
               {children}
             </div>
           </AuthProvider>
+          
+          {/* Warning Banner */}
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-orange-500 text-white px-4 py-3 shadow-2xl">
+            <div className="max-w-6xl mx-auto flex items-center justify-center gap-3 text-center">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm sm:text-base font-medium">
+                <span className="font-semibold">Notice:</span> This project is paused. 
+                For a working demonstration, please contact the owner at{" "}
+                <a 
+                  href="mailto:hasanfaaz10@gmail.com" 
+                  className="underline hover:text-orange-100 transition-colors"
+                >
+                  hasanfaaz10@gmail.com
+                </a>
+              </p>
+            </div>
+          </div>
         </Providers>
       </body>
     </html>
