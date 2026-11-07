@@ -5,7 +5,7 @@
 
 Hello!  This is a side-project I put together.  It lets you describe a documentation change in plain English and then shows AI-generated edit suggestions that you can tweak or approve.
 
-🟢 **Give it a spin:** https://doccelerate-web-production.up.railway.app/
+🟢 **Give it a spin:** https://doccelerate.vercel.app/
 
 ---
 
